@@ -1,0 +1,106 @@
+{
+  "projectType": "data-platform",
+  "projectName": "Dataknow Data Engineering Technical Test",
+  "projectDescription": "Comprehensive data engineering technical assessment covering ETL pipelines, SQL optimization, and ML fraud detection",
+  "theme": "sequoia",
+  "primaryColor": "#1e40af",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e3a8a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": [
+              "index",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "quickstart",
+              "requirements"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Data Engineering",
+        "groups": [
+          {
+            "group": "ETL Pipelines",
+            "pages": [
+              "etl/data-loading",
+              "etl/data-manipulation",
+              "etl/power-plant-analysis"
+            ]
+          },
+          {
+            "group": "Database Design",
+            "pages": [
+              "database/schema-design",
+              "database/optimization-strategies",
+              "database/data-aggregation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Machine Learning",
+        "groups": [
+          {
+            "group": "Fraud Detection",
+            "pages": [
+              "ml/model-overview",
+              "ml/data-preprocessing",
+              "ml/model-training",
+              "ml/evaluation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Code Examples",
+            "pages": [
+              "reference/python-examples",
+              "reference/sql-queries"
+            ]
+          },
+          {
+            "group": "Data Schemas",
+            "pages": [
+              "reference/power-plant-schema",
+              "reference/weather-schema",
+              "reference/fraud-detection-schema"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Text file parsing and data extraction for energy sector data",
+    "Advanced Pandas data manipulation and merging operations",
+    "MySQL database design with performance optimization",
+    "Temperature conversion and data aggregation pipelines",
+    "Random Forest fraud detection model with 98.8% AUC-ROC",
+    "Comprehensive data preprocessing with missing value handling",
+    "One-hot encoding for categorical variables",
+    "Cross-validation and model evaluation metrics"
+  ],
+  "publicApiSurface": [
+    "Data Loading: Custom parser for OFEI plant data files",
+    "Data Manipulation: Pandas merge and aggregation functions",
+    "SQL Optimization: Indexing, partitioning, and dimensional modeling",
+    "Temperature Conversion: Celsius to Fahrenheit aggregation",
+    "Delta Calculation: LAG window functions for temperature changes",
+    "RandomForestClassifier: Fraud detection model with 200 estimators",
+    "Model Evaluation: Confusion matrix, classification report, ROC-AUC"
+  ]
+}
