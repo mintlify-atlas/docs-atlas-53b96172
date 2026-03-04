@@ -1,0 +1,177 @@
+---
+title: 'Schema Design'
+description: 'Database schema design for the meteorological data system'
+---
+
+## Overview
+
+The meteorological database uses a normalized schema to store weather observations from various Colombian cities. The design focuses on data integrity through constraints and ensures uniqueness of measurements per location and time.
+
+## Database Structure
+
+### Database Creation
+
+```sql
+CREATE DATABASE meteorologia;
+USE meteorologia;
+```
+
+## Clima Table
+
+The `clima` table is the core entity that stores hourly weather observations.
+
+### Table Definition
+
+```sql
+CREATE TABLE clima (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(50) NOT NULL DEFAULT 'Colombia',
+    tempCelsius DECIMAL(5,2) NOT NULL,
+    fechaHora DATETIME NOT NULL,
+    coberturaNubes VARCHAR (20) CHECK (coberturaNubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indiceUv DECIMAL (4 , 2),
+    presionAtmosferica DECIMAL (7 , 2),
+    velocidadVientoNudos DECIMAL (5 , 2),
+    
+    CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+);
+```
+
+## Field Definitions
+
+### Primary Key
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `BIGINT AUTO_INCREMENT` | Unique identifier for each weather observation. Uses BIGINT to support large-scale data collection over time. |
+
+### Location Fields
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `localidad` | `VARCHAR(100)` | `NOT NULL` | City or locality name where the measurement was taken |
+| `pais` | `VARCHAR(50)` | `NOT NULL DEFAULT 'Colombia'` | Country name with a default value for Colombian observations |
+
+### Measurement Fields
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `tempCelsius` | `DECIMAL(5,2)` | `NOT NULL` | Temperature in Celsius. Supports values from -999.99 to 999.99°C |
+| `fechaHora` | `DATETIME` | `NOT NULL` | Timestamp of the observation with date and time precision |
+| `coberturaNubes` | `VARCHAR(20)` | `NOT NULL`, `CHECK` constraint | Cloud coverage: 'Minima', 'Parcial', or 'Total' |
+| `indiceUv` | `DECIMAL(4,2)` | Optional | UV index measurement (0-99.99) |
+| `presionAtmosferica` | `DECIMAL(7,2)` | Optional | Atmospheric pressure in hPa/mb (up to 99999.99) |
+| `velocidadVientoNudos` | `DECIMAL(5,2)` | Optional | Wind speed in knots (up to 999.99) |
+
+## Constraints
+
+### PRIMARY KEY
+
+```sql
+id BIGINT AUTO_INCREMENT PRIMARY KEY
+```
+
+The `id` field serves as the surrogate primary key, automatically incrementing for each new record.
+
+### UNIQUE Constraint
+
+```sql
+CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+```
+
+**Purpose**: Prevents duplicate weather observations for the same location at the same timestamp.
+
+**Business Rule**: Each city can only have one weather measurement per specific date and time.
+
+### CHECK Constraint
+
+```sql
+CHECK (coberturaNubes IN ('Minima','Parcial','Total'))
+```
+
+**Purpose**: Enforces data quality by limiting cloud coverage to three predefined categories.
+
+**Valid Values**:
+- `'Minima'` - Minimal cloud coverage
+- `'Parcial'` - Partial cloud coverage
+- `'Total'` - Total/complete cloud coverage
+
+### NOT NULL Constraints
+
+Critical fields that must always have values:
+- `localidad` - Location is mandatory for context
+- `pais` - Country defaults to 'Colombia' but cannot be NULL
+- `tempCelsius` - Temperature is the primary measurement
+- `fechaHora` - Timestamp is essential for temporal analysis
+- `coberturaNubes` - Cloud coverage is a required observation
+
+## Design Decisions
+
+### 1. BIGINT for Primary Key
+
+**Rationale**: Weather data accumulates rapidly. A BIGINT supports up to 9,223,372,036,854,775,807 records, ensuring the system can handle decades of hourly observations from multiple locations.
+
+### 2. DECIMAL for Numeric Measurements
+
+**Rationale**: Using DECIMAL instead of FLOAT ensures precise storage of measurements without floating-point rounding errors. This is critical for scientific accuracy.
+
+- `DECIMAL(5,2)` for temperature: -999.99 to 999.99°C
+- `DECIMAL(4,2)` for UV index: 0 to 99.99
+- `DECIMAL(7,2)` for pressure: up to 99999.99 hPa
+
+### 3. Composite UNIQUE Constraint
+
+**Rationale**: The combination of `(localidad, fechaHora)` ensures data integrity while allowing:
+- Multiple measurements for the same location at different times
+- Multiple locations measured at the same time
+- Prevention of duplicate entries
+
+### 4. Optional Environmental Fields
+
+**Rationale**: Fields like `indiceUv`, `presionAtmosferica`, and `velocidadVientoNudos` are optional because:
+- Not all weather stations may have these sensors
+- Some observations might have incomplete data
+- Allows flexibility in data collection while maintaining core measurements
+
+### 5. DEFAULT Value for Country
+
+**Rationale**: Since the system primarily serves Colombian locations, setting `DEFAULT 'Colombia'` reduces data entry overhead while maintaining the flexibility to record international observations.
+
+### 6. VARCHAR Sizing
+
+**Rationale**: 
+- `localidad VARCHAR(100)` - Accommodates long city names
+- `pais VARCHAR(50)` - Sufficient for country names
+- `coberturaNubes VARCHAR(20)` - Sized for the longest valid value ('Parcial')
+
+## Sample Data
+
+The schema supports observations from multiple Colombian cities:
+
+```sql
+INSERT INTO clima (
+    localidad,
+    tempCelsius,
+    fechaHora,
+    coberturaNubes,
+    indiceUv,
+    presionAtmosferica,
+    velocidadVientoNudos
+)
+VALUES
+('Bogota', 19, '2025-01-01 08:00:00', 'Parcial', 3.5, 1012.2, 9.5),
+('Medellin', 23, '2024-05-01 08:00:00', 'Parcial', 5.5, 1007.2, 8.5),
+('Envigado', 22, '2024-09-01 08:00:00', 'Total', 5.3, 1007.5, 8.0),
+('Sabaneta', 28, '2024-03-01 09:00:00', 'Total', 11.5, 1010.5, 5.0),
+('Cali', 28, '2025-02-21 07:00:00', 'Minima', 7.0, 1009.5, 12.0),
+('Barranquilla', 31, '2024-11-15 08:00:00', 'Total', 8.3, 1010.0, 12.5),
+('Cartagena', 33, '2025-02-01 08:00:00', 'Total', 8.8, 1010.8, 10.5);
+```
+
+## Schema Verification
+
+```sql
+SHOW TABLES;
+SELECT * FROM clima;
+```

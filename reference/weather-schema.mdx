@@ -1,0 +1,211 @@
+---
+title: Weather Database Schema
+description: Schema documentation for meteorologia database tables
+---
+
+## Database Overview
+
+```sql
+CREATE DATABASE meteorologia;
+```
+
+The `meteorologia` database stores hourly and daily weather observations for Colombian cities.
+
+---
+
+## `clima` Table
+
+Stores hourly weather observations with full meteorological metrics.
+
+### Schema
+
+```sql
+CREATE TABLE clima (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(50) NOT NULL DEFAULT 'Colombia',
+    tempCelsius DECIMAL(5,2) NOT NULL,
+    fechaHora DATETIME NOT NULL,
+    coberturaNubes VARCHAR (20) CHECK (coberturaNubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indiceUv DECIMAL (4 , 2),
+    presionAtmosferica DECIMAL (7 , 2),
+    velocidadVientoNudos DECIMAL (5 , 2),
+    delta_temp_c DECIMAL(6,2),
+    
+    CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+);
+```
+
+### Field Descriptions
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | BIGINT | PRIMARY KEY, AUTO_INCREMENT | Unique record identifier |
+| `localidad` | VARCHAR(100) | NOT NULL | City or locality name |
+| `pais` | VARCHAR(50) | NOT NULL, DEFAULT 'Colombia' | Country name |
+| `tempCelsius` | DECIMAL(5,2) | NOT NULL | Temperature in Celsius |
+| `fechaHora` | DATETIME | NOT NULL | Date and time of observation |
+| `coberturaNubes` | VARCHAR(20) | NOT NULL, CHECK | Cloud coverage: 'Minima', 'Parcial', or 'Total' |
+| `indiceUv` | DECIMAL(4,2) | NULL | UV index |
+| `presionAtmosferica` | DECIMAL(7,2) | NULL | Atmospheric pressure in hPa |
+| `velocidadVientoNudos` | DECIMAL(5,2) | NULL | Wind speed in knots |
+| `delta_temp_c` | DECIMAL(6,2) | NULL | Temperature change from previous reading |
+
+### Constraints
+
+- **Primary Key:** `id`
+- **Unique Constraint:** `uk_localidad_fecha` on (`localidad`, `fechaHora`)
+  - Ensures no duplicate observations for same location and time
+- **Check Constraint:** `coberturaNubes IN ('Minima','Parcial','Total')`
+  - Validates cloud coverage values
+
+### Example Data
+
+```sql
+SELECT * FROM clima LIMIT 3;
+```
+
+| id | localidad | pais | tempCelsius | fechaHora | coberturaNubes | indiceUv | presionAtmosferica | velocidadVientoNudos | delta_temp_c |
+|----|-----------|------|-------------|-----------|----------------|----------|-------------------|---------------------|-------------|
+| 1 | Bogota | Colombia | 19.00 | 2025-01-01 08:00:00 | Parcial | 3.50 | 1012.20 | 9.50 | NULL |
+| 2 | Bogota | Colombia | 20.00 | 2025-01-20 08:00:00 | Parcial | 7.50 | 1012.30 | 12.40 | 1.00 |
+| 3 | Medellin | Colombia | 23.00 | 2024-05-01 08:00:00 | Parcial | 5.50 | 1007.20 | 8.50 | NULL |
+
+---
+
+## `clima_diario_f` Table
+
+Aggregated daily weather data with temperature in Fahrenheit.
+
+### Schema
+
+```sql
+CREATE TABLE clima_diario_f (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(100) NOT NULL,
+    fecha DATE NOT NULL,
+    temperatura_f DECIMAL(6,2) NOT NULL,
+    cobertura_nubes VARCHAR (20) CHECK (cobertura_nubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indice_uv DECIMAL(4,2),
+    presion_atmosferica DECIMAL(7,2),
+    velocidad_viento_nudos DECIMAL(5,2),
+    delta_temp_f DECIMAL(6,2),
+    
+    UNIQUE(localidad, fecha)
+);
+```
+
+### Field Descriptions
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | BIGINT | PRIMARY KEY, AUTO_INCREMENT | Unique record identifier |
+| `localidad` | VARCHAR(100) | NOT NULL | City or locality name |
+| `pais` | VARCHAR(100) | NOT NULL | Country name |
+| `fecha` | DATE | NOT NULL | Date of observation (without time) |
+| `temperatura_f` | DECIMAL(6,2) | NOT NULL | Average daily temperature in Fahrenheit |
+| `cobertura_nubes` | VARCHAR(20) | NOT NULL, CHECK | Maximum cloud coverage observed |
+| `indice_uv` | DECIMAL(4,2) | NULL | Average UV index |
+| `presion_atmosferica` | DECIMAL(7,2) | NULL | Average atmospheric pressure |
+| `velocidad_viento_nudos` | DECIMAL(5,2) | NULL | Average wind speed in knots |
+| `delta_temp_f` | DECIMAL(6,2) | NULL | Temperature change from previous day |
+
+### Constraints
+
+- **Primary Key:** `id`
+- **Unique Constraint:** (`localidad`, `fecha`)
+  - Ensures one aggregated record per location per day
+- **Check Constraint:** `cobertura_nubes IN ('Minima','Parcial','Total')`
+
+### Data Source
+
+This table is populated via aggregation query from the `clima` table:
+
+```sql
+INSERT INTO clima_diario_f (...)
+SELECT 
+    localidad,
+    pais,
+    DATE(fechaHora) AS fecha,
+    ROUND((AVG(tempCelsius) * 9/5) + 32, 2) AS temperatura_f,
+    MAX(coberturaNubes),
+    AVG(indiceUv),
+    AVG(presionAtmosferica),
+    AVG(velocidadVientoNudos)
+FROM clima
+GROUP BY localidad, DATE(fechaHora);
+```
+
+---
+
+## Indexes
+
+### Performance Index
+
+```sql
+CREATE INDEX idx_localidad_fecha
+ON clima(localidad, fechaHora);
+```
+
+**Purpose:** Optimizes queries filtering by location and date range.
+
+**Typical Use Case:**
+```sql
+SELECT * FROM clima
+WHERE localidad = 'Bogota'
+  AND fechaHora BETWEEN '2025-01-01' AND '2025-02-21';
+```
+
+---
+
+## Partitioning Strategy
+
+```sql
+ALTER TABLE clima
+PARTITION BY RANGE (YEAR(fechaHora)) (
+    PARTITION p2024 VALUES LESS THAN (2025),
+    PARTITION p2025 VALUES LESS THAN (2026),
+    PARTITION pMax VALUES LESS THAN MAXVALUE
+);
+```
+
+**Benefits:**
+- Faster queries on specific years
+- Efficient data archival
+- Improved maintenance operations
+
+---
+
+## Supported Locations
+
+Cities included in sample data:
+- Bogota
+- Medellin
+- Envigado
+- Sabaneta
+- Cali
+- Barranquilla
+- Cartagena
+
+---
+
+## Usage Examples
+
+### Query Recent Temperature Changes
+
+```sql
+SELECT localidad, fechaHora, tempCelsius, delta_temp_c
+FROM clima
+WHERE delta_temp_c IS NOT NULL
+ORDER BY localidad, fechaHora;
+```
+
+### Compare Daily Averages
+
+```sql
+SELECT localidad, fecha, temperatura_f, delta_temp_f
+FROM clima_diario_f
+WHERE YEAR(fecha) = 2025
+ORDER BY fecha DESC;
+```

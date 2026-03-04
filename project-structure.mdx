@@ -1,0 +1,449 @@
+---
+title: Project Structure
+description: Overview of the technical test file organization and contents
+icon: folder-tree
+---
+
+This technical assessment consists of three main files demonstrating proficiency in data engineering, SQL database design, and machine learning.
+
+## File Organization
+
+```
+Prueba_tecnica_dataknow_Jose_Arteaga/
+├── Prueba_tecnica_Dataknow.ipynb    # Main notebook with all Python code
+├── prueba_SQL_Dataknow.sql          # Database design and queries
+└── test_evaluado.csv                # ML model predictions output
+```
+
+## Main Jupyter Notebook
+
+<Card title="Prueba_tecnica_Dataknow.ipynb" icon="book" href="https://colab.research.google.com/github/Jocesitho/Prueba_tecnica_dataknow_Jose_Arteaga/blob/master/Prueba_tecnica_Dataknow.ipynb">
+  Interactive notebook containing all data processing and machine learning implementations
+</Card>
+
+### Notebook Sections
+
+The notebook is organized into three major sections:
+
+<AccordionGroup>
+  <Accordion title="1. Data Loading (CARGA DE INFORMACIÓN)" icon="upload">
+    
+    **Purpose**: Parse and load Colombian energy market data from OFEI format
+    
+    **Key Features**:
+    - Custom text file parser for OFEI1204.txt
+    - Handles Latin-1 encoding for special characters
+    - Extracts agent information and plant generation data
+    - Processes 24-hour generation columns
+    - Creates structured DataFrame with 305 power plants
+    
+    **Data Schema**:
+    ```python
+    columns = ["Agente", "Tipo", "Planta"] + [f"Hora_{i}" for i in range(1, 25)]
+    ```
+    
+    **Output**: DataFrame with agents like AES CHIVOR, EMGESA, CELSIA and their hourly power generation in MW
+    
+    <Note>
+      The parser specifically filters for lines containing ", D," to identify power generation records (type D = declared generation).
+    </Note>
+  </Accordion>
+
+  <Accordion title="2. Data Manipulation (MANIPULACIÓN DE DATOS)" icon="table">
+    
+    **Purpose**: Integrate multiple data sources and perform complex transformations
+    
+    **Data Sources**:
+    - **Master Data**: `Datos Maestros VF.xlsx` - Plant metadata with agent names, plant codes, and types
+    - **dDEC Data**: `dDEC1204.TXT` - Declared generation data with 24 hourly columns
+    
+    **Processing Steps**:
+    
+    1. **Load Master Data**
+       ```python
+       cols = ['Nombre visible Agente', 'AGENTE (OFEI)', 
+               'CENTRAL (dDEC, dSEGDES, dPRU…)', 
+               'Tipo de central (Hidro, Termo, Filo, Menor)']
+       ```
+    
+    2. **Filter by Criteria**
+       - Agents: EMGESA, EMGESA S.A.
+       - Plant Types: H (Hydro), T (Thermal)
+    
+    3. **Merge Datasets**
+       - Join master data with dDEC file on plant name
+       - Text normalization (strip, uppercase) for accurate matching
+    
+    4. **Calculate Totals**
+       - Sum all 24 hourly columns horizontally
+       - Filter plants with generation > 0
+    
+    **Results**: 16 active EMGESA plants including BETANIA, ELQUIMBO, GUAVIO, and PAGUA with total daily generation values
+  </Accordion>
+
+  <Accordion title="6. ML Analytical Modeling (PRUEBA DE MODELACIÓN ANALÍTICA)" icon="brain">
+    
+    **Purpose**: Build fraud detection classifier for financial transactions
+    
+    **Model Architecture**:
+    ```python
+    RandomForestClassifier(
+        n_estimators=200,
+        random_state=42,
+        class_weight='balanced'
+    )
+    ```
+    
+    **Data Preprocessing**:
+    
+    1. **Feature Selection**
+       - Use common columns between train and test
+       - Exclude 'id' and target variable 'FRAUDE'
+    
+    2. **Missing Value Handling**
+       - Numeric columns: Fill with mean
+       - Categorical columns: Fill with "Desconocido" (Unknown)
+    
+    3. **Encoding**
+       - One-hot encoding for categorical variables
+       - Drop first category to avoid multicollinearity
+       - Align test columns with training set
+    
+    **Model Training**:
+    - 80/20 train-validation split
+    - Stratified sampling to maintain fraud proportion
+    - Balanced class weights to handle imbalance
+    
+    **Performance Metrics**:
+    
+    **Confusion Matrix**:
+    ```
+    [[436  11]   # True Negatives: 436, False Positives: 11
+     [ 17 129]]  # False Negatives: 17, True Positives: 129
+    ```
+    
+    **Classification Report**:
+    - **Class 0 (Non-Fraud)**: 96% precision, 98% recall, 97% F1-score
+    - **Class 1 (Fraud)**: 92% precision, 88% recall, 90% F1-score
+    - **Overall Accuracy**: 95%
+    - **AUC-ROC**: 0.988 (excellent discrimination)
+    
+    **Prediction Output**:
+    - 100 test cases evaluated
+    - Binary predictions (0 = legitimate, 1 = fraud)
+    - Threshold: 0.5 probability cutoff
+    - Results saved to `test_evaluado.csv`
+    
+    <Tip>
+      The high AUC-ROC of 98.8% indicates the model excellently distinguishes between fraudulent and legitimate transactions, significantly outperforming random guessing (50%).
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## SQL Script File
+
+<Card title="prueba_SQL_Dataknow.sql" icon="database">
+  Complete database implementation for weather data management system
+</Card>
+
+### SQL Script Sections
+
+The SQL file demonstrates advanced database design patterns:
+
+<Steps>
+  <Step title="Point 1: Database Creation and Schema Design">
+    
+    **Database**: `meteorologia`
+    
+    **Main Table**: `clima`
+    
+    **Schema Definition**:
+    ```sql
+    CREATE TABLE clima (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        localidad VARCHAR(100) NOT NULL,
+        pais VARCHAR(50) NOT NULL DEFAULT 'Colombia',
+        tempCelsius DECIMAL(5,2) NOT NULL,
+        fechaHora DATETIME NOT NULL,
+        coberturaNubes VARCHAR(20) CHECK (coberturaNubes IN ('Minima','Parcial','Total')),
+        indiceUv DECIMAL(4,2),
+        presionAtmosferica DECIMAL(7,2),
+        velocidadVientoNudos DECIMAL(5,2),
+        CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+    );
+    ```
+    
+    **Key Features**:
+    - CHECK constraint for cloud coverage validation
+    - UNIQUE constraint preventing duplicate readings for same location/time
+    - DEFAULT value for country column
+    - Appropriate data types with precision (DECIMAL for measurements)
+    
+    **Sample Data**:
+    - 24 weather records across Colombian cities
+    - Cities: Bogota, Medellin, Envigado, Sabaneta, Cali, Barranquilla, Cartagena
+    - Date range: 2024-2026
+    - Realistic weather measurements (temperature, UV, pressure, wind speed)
+  </Step>
+
+  <Step title="Point 2: Query Optimization Strategies">
+    
+    Three different approaches for improving query performance:
+    
+    **Option 1: Strategic Indexing**
+    ```sql
+    CREATE INDEX idx_localidad_fecha
+    ON clima(localidad, fechaHora);
+    ```
+    - Composite index on frequently queried columns
+    - Speeds up date range and location-based queries
+    - Benefits: Fast lookups, minimal storage overhead
+    
+    **Option 2: Table Partitioning**
+    ```sql
+    ALTER TABLE clima
+    PARTITION BY RANGE (YEAR(fechaHora)) (
+        PARTITION p2024 VALUES LESS THAN (2025),
+        PARTITION p2025 VALUES LESS THAN (2026),
+        PARTITION pMax VALUES LESS THAN MAXVALUE
+    );
+    ```
+    - Year-based partitioning for large datasets
+    - Benefits: Partition pruning, easier data management
+    - Ideal for time-series data with date-based queries
+    
+    **Option 3: Dimensional Modeling**
+    ```sql
+    CREATE TABLE dim_localidad (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        localidad VARCHAR(100),
+        pais VARCHAR(100),
+        -- Foreign key reference in main table
+    );
+    ```
+    - Separate dimension table for location attributes
+    - Reduces redundancy in fact table
+    - Benefits: Normalized design, efficient joins
+    
+    <Info>
+      Each optimization strategy targets different use cases. Indexing works for most scenarios, partitioning scales for time-series data, and dimensional modeling supports analytical workloads.
+    </Info>
+  </Step>
+
+  <Step title="Point 3: Data Aggregation and Transformation">
+    
+    **New Table**: `clima_diario_f` (Daily climate in Fahrenheit)
+    
+    **Transformation Query**:
+    ```sql
+    INSERT INTO clima_diario_f (
+        localidad, pais, fecha, temperatura_f,
+        cobertura_nubes, indice_uv, 
+        presion_atmosferica, velocidad_viento_nudos
+    )
+    SELECT 
+        localidad,
+        pais,
+        DATE(fechaHora) AS fecha,
+        ROUND((AVG(tempCelsius) * 9/5) + 32, 2) AS temperatura_f,
+        MAX(coberturaNubes),
+        AVG(indiceUv),
+        AVG(presionAtmosferica),
+        AVG(velocidadVientoNudos)
+    FROM clima
+    GROUP BY localidad, DATE(fechaHora);
+    ```
+    
+    **Processing Logic**:
+    - Group hourly readings to daily summaries
+    - Convert Celsius to Fahrenheit: (°C × 9/5) + 32
+    - Aggregate functions: AVG for continuous metrics, MAX for categorical
+    - UNIQUE constraint on (localidad, fecha) prevents duplicates
+    
+    **Use Case**: Daily weather summaries for US-based reporting systems requiring Fahrenheit temperatures
+  </Step>
+
+  <Step title="Point 4: Window Functions for Delta Calculations">
+    
+    **Purpose**: Calculate temperature changes between consecutive readings
+    
+    **Implementation for Original Table**:
+    ```sql
+    ALTER TABLE clima
+    ADD COLUMN delta_temp_c DECIMAL(6,2);
+    
+    UPDATE clima c
+    JOIN (
+        SELECT 
+            id,
+            tempCelsius - LAG(tempCelsius) OVER (
+                PARTITION BY localidad
+                ORDER BY fechaHora
+            ) AS delta
+        FROM clima
+    ) t ON c.id = t.id
+    SET c.delta_temp_c = t.delta;
+    ```
+    
+    **Window Function Mechanics**:
+    - `PARTITION BY localidad`: Separate calculations per city
+    - `ORDER BY fechaHora`: Chronological ordering
+    - `LAG()`: Access previous row's temperature value
+    - Subquery pattern required for UPDATE with window functions in MySQL
+    
+    **Implementation for Daily Table**:
+    ```sql
+    ALTER TABLE clima_diario_f
+    ADD COLUMN delta_temp_f DECIMAL(6,2);
+    
+    UPDATE clima_diario_f cd
+    JOIN (
+        SELECT 
+            id,
+            temperatura_f - LAG(temperatura_f) OVER (
+                PARTITION BY localidad
+                ORDER BY fecha
+            ) AS delta
+        FROM clima_diario_f
+    ) t ON cd.id = t.id
+    SET cd.delta_temp_f = t.delta;
+    ```
+    
+    **Business Value**:
+    - Identifies sudden temperature changes for weather alerts
+    - First reading per location has NULL delta (no previous value)
+    - Enables trend analysis and anomaly detection
+    
+    <Warning>
+      Window functions calculate delta values based on ORDER BY sequence. Ensure proper ordering (fechaHora or fecha) to get accurate consecutive differences.
+    </Warning>
+  </Step>
+</Steps>
+
+## Output File
+
+<Card title="test_evaluado.csv" icon="file-csv">
+  Fraud detection model predictions for submission
+</Card>
+
+### File Structure
+
+**Format**: CSV with header row
+
+**Columns**:
+- `id`: Transaction identifier (BIGINT)
+- `FRAUDE`: Binary prediction (0 = legitimate, 1 = fraudulent)
+
+**Sample Data**:
+```csv
+id,FRAUDE
+98523068,0
+300237898,0
+943273308,1
+951645809,1
+963797516,1
+...
+```
+
+**Statistics**:
+- Total records: 100 test cases
+- Fraud predictions: Mix of 0s and 1s based on model probability threshold (0.5)
+- File size: 1,295 bytes
+
+<Info>
+  This file represents the final deliverable for the fraud detection challenge, containing predictions for previously unseen transactions using the trained Random Forest model.
+</Info>
+
+## Technical Implementation Details
+
+### Development Environment
+
+<CardGroup cols={2}>
+  <Card title="Platform" icon="google">
+    **Google Colab**
+    - Cloud-based Jupyter environment
+    - GPU/TPU acceleration available
+    - Direct GitHub integration
+    - Google Drive mounting for data access
+  </Card>
+  
+  <Card title="Python Version" icon="python">
+    **Python 3.x**
+    - Standard Colab runtime
+    - Pre-installed data science libraries
+    - Compatibility with scikit-learn 1.x
+  </Card>
+</CardGroup>
+
+### Key Dependencies
+
+**Data Processing**:
+- `pandas` - DataFrame operations and CSV handling
+- `numpy` - Numerical computations (implicit via pandas)
+
+**Machine Learning**:
+- `sklearn.ensemble.RandomForestClassifier` - Ensemble model
+- `sklearn.model_selection.train_test_split` - Data splitting
+- `sklearn.metrics` - Model evaluation (confusion_matrix, classification_report, roc_auc_score)
+
+**File I/O**:
+- Standard Python file handling with `open()` and context managers
+- `pd.read_csv()` and `pd.read_excel()` for structured data
+- `pd.to_csv()` for output generation
+
+### Code Quality Features
+
+<AccordionGroup>
+  <Accordion title="Documentation" icon="comment">
+    - Inline comments explaining each code section
+    - Spanish comments for clarity (matching project context)
+    - Step-by-step logic description
+    - Purpose statements for each major operation
+  </Accordion>
+  
+  <Accordion title="Error Handling" icon="shield">
+    - Encoding specification (latin-1) for special characters
+    - Column alignment between train and test (reindex)
+    - Missing value handling for both numeric and categorical
+    - Type validation with `.copy()` to avoid SettingWithCopyWarning
+  </Accordion>
+  
+  <Accordion title="Reproducibility" icon="rotate">
+    - `random_state=42` for consistent results
+    - Stratified splitting to maintain class distribution
+    - Fixed column ordering with `drop_first=True`
+    - Version-controlled via GitHub repository
+  </Accordion>
+</AccordionGroup>
+
+## Repository Information
+
+<Card title="GitHub Repository" icon="github" href="https://github.com/Jocesitho/Prueba_tecnica_dataknow_Jose_Arteaga">
+  View the complete source code and version history
+</Card>
+
+**Repository Details**:
+- **Owner**: Jose Antonio Arteaga Bolaños
+- **Purpose**: Technical assessment for Data Engineer position at Dataknow
+- **Branch**: master
+- **Colab Integration**: Direct notebook opening via colab.research.google.com link
+
+**Contact Information**:
+- Phone: 3007586135
+- Email: Josearteagabolanos73@gmail.com
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="ETL Pipeline" icon="pipe" href="/etl/data-loading">
+    Explore the data loading implementation
+  </Card>
+  <Card title="Database Design" icon="database" href="/database/schema-design">
+    Review SQL schema and optimization
+  </Card>
+  <Card title="ML Model" icon="chart-line" href="/ml/model-overview">
+    Understand the fraud detection model
+  </Card>
+</CardGroup>

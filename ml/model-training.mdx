@@ -1,0 +1,200 @@
+---
+title: 'Model Training'
+description: 'Training process and validation strategy for the fraud detection model'
+---
+
+## Overview
+
+This page documents the complete training process for the fraud detection model, including data splitting, model fitting, validation, and final training on the full dataset.
+
+## Train-Validation Split
+
+Before training, the data is split into training and validation sets to evaluate model performance:
+
+```python
+from sklearn.model_selection import train_test_split
+
+# Split data into train and validation sets
+X_train, X_val, y_train, y_val = train_test_split(
+    X,                    # Predictor variables
+    y,                    # Target variable
+    test_size=0.2,        # 20% for validation
+    random_state=42,      # Seed for reproducibility
+    stratify=y            # Maintain class proportion
+)
+```
+
+**Split configuration**:
+- **80% training**: Used to fit the model
+- **20% validation**: Used to evaluate performance
+- **Stratified**: Ensures both sets have the same fraud/non-fraud ratio
+- **Random state 42**: Makes the split reproducible
+
+### Why Stratified Split?
+
+Stratification is crucial for imbalanced datasets:
+- Preserves the proportion of fraudulent vs. legitimate transactions
+- Without stratification, one set might have too few fraud cases
+- Ensures reliable validation metrics
+
+## Model Initialization and Fitting
+
+The Random Forest model is initialized and trained on the training set:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+# Initialize Random Forest model
+model = RandomForestClassifier(
+    n_estimators=200,        # Number of trees in the forest
+    random_state=42,         # Seed for reproducibility
+    class_weight='balanced'  # Adjust weight of classes for imbalance
+)
+
+# Train model with training data
+model.fit(X_train, y_train)
+```
+
+**Training process**:
+1. Model learns patterns from `X_train` (features) and `y_train` (labels)
+2. Builds 200 decision trees on random subsets of data
+3. Each tree learns different aspects of the data
+4. Predictions are made by majority voting across trees
+
+## Validation Predictions
+
+After training, the model is evaluated on the validation set:
+
+```python
+# Generate predictions on validation set
+y_val_pred = model.predict(X_val)              # Binary predictions (0 or 1)
+y_val_proba = model.predict_proba(X_val)[:, 1] # Probability of fraud
+```
+
+**Two types of predictions**:
+- **`predict()`**: Returns binary class (0=legitimate, 1=fraud)
+- **`predict_proba()`**: Returns probability score between 0 and 1
+
+Probability scores are useful for:
+- Adjusting decision thresholds
+- Ranking transactions by fraud risk
+- Calculating ROC-AUC metric
+
+## Threshold Adjustment
+
+The default classification threshold is 0.5, meaning:
+- Probability ≥ 0.5 → Fraud
+- Probability < 0.5 → Legitimate
+
+```python
+# Threshold for classification
+threshold = 0.5
+
+# Apply threshold to probabilities
+y_pred_test = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+```
+
+**Threshold tuning** (not applied in this implementation, but possible):
+- Lower threshold (e.g., 0.3) → More sensitive, catches more fraud, but more false alarms
+- Higher threshold (e.g., 0.7) → More conservative, fewer false alarms, but might miss fraud
+
+For fraud detection, you might want a lower threshold to catch more fraud cases.
+
+## Retraining on Full Dataset
+
+After validating performance, the model is retrained on the **entire training dataset** for final predictions:
+
+```python
+# Retrain model using all available data
+model.fit(X, y)
+```
+
+**Why retrain on full data?**
+- Uses all available information (no data held back for validation)
+- Improves model performance on final test set
+- Validation was only used to assess expected performance
+- Final model benefits from seeing all training examples
+
+## Making Final Predictions
+
+With the retrained model, predictions are made on the test set:
+
+```python
+# Generate predictions for test set
+y_pred_test = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+
+# Create submission file
+submission = pd.DataFrame({
+    "id": ids_test,         # Transaction IDs
+    "FRAUDE": y_pred_test   # Model predictions
+})
+
+# Save to CSV
+submission.to_csv("/content/test_evaluado.csv", index=False)
+```
+
+## Complete Training Code
+
+Here's the full training pipeline:
+
+```python
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+
+# Load preprocessed data (X, y, X_test from preprocessing step)
+
+# Split for validation
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+# Initialize and train model
+model = RandomForestClassifier(
+    n_estimators=200,
+    random_state=42,
+    class_weight='balanced'
+)
+model.fit(X_train, y_train)
+
+# Validate model
+y_val_pred = model.predict(X_val)
+y_val_proba = model.predict_proba(X_val)[:, 1]
+
+# Print metrics (see Evaluation page for detailed results)
+print("CONFUSION MATRIX")
+print(confusion_matrix(y_val, y_val_pred))
+print("\nCLASSIFICATION REPORT")
+print(classification_report(y_val, y_val_pred))
+print("\nAUC-ROC:", roc_auc_score(y_val, y_val_proba))
+
+# Retrain on full dataset
+model.fit(X, y)
+
+# Make final predictions
+threshold = 0.5
+y_pred_test = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+
+# Save predictions
+submission = pd.DataFrame({
+    "id": ids_test,
+    "FRAUDE": y_pred_test
+})
+submission.to_csv("/content/test_evaluado.csv", index=False)
+```
+
+## Training Best Practices
+
+1. **Always use a validation set** before final predictions
+2. **Stratify splits** for imbalanced datasets
+3. **Set random_state** for reproducible results
+4. **Retrain on full data** after validation
+5. **Save predictions** with original IDs for traceability
+
+## Next Steps
+
+To see detailed performance metrics and model evaluation, visit the [Evaluation](/ml/evaluation) page.

@@ -1,0 +1,296 @@
+---
+title: 'Requirements'
+description: 'Technical requirements and dependencies for the data engineering technical test'
+---
+
+## Overview
+
+This project is designed to run in **Google Colab**, but can also be executed in any Python environment with the required dependencies installed. The system demonstrates ETL pipelines, SQL database design, and machine learning capabilities.
+
+## Python Environment
+
+### Required Python Version
+
+- Python 3.7 or higher
+
+### Core Dependencies
+
+The project uses the following Python libraries:
+
+<CardGroup cols={2}>
+  <Card title="pandas" icon="table">
+    Data manipulation and analysis library for structured data operations
+  </Card>
+  <Card title="scikit-learn" icon="brain">
+    Machine learning library for the Random Forest classifier and evaluation metrics
+  </Card>
+</CardGroup>
+
+### Detailed Library Requirements
+
+```python
+# Data manipulation
+import pandas as pd
+
+# Machine learning
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+```
+
+### Installation
+
+<CodeGroup>
+```bash pip
+pip install pandas scikit-learn
+```
+
+```bash conda
+conda install pandas scikit-learn
+```
+
+```bash Google Colab
+# Pre-installed in Google Colab
+# No additional installation needed
+```
+</CodeGroup>
+
+## Database Requirements
+
+### MySQL Server
+
+The SQL component requires MySQL 5.7 or higher with support for:
+
+- **Partitioning**: RANGE partitioning by date
+- **Window Functions**: LAG function for delta calculations
+- **Constraints**: CHECK constraints (MySQL 8.0+)
+
+<Note>
+If using MySQL 5.7, you may need to modify CHECK constraints or implement them at the application level.
+</Note>
+
+### Database Features Used
+
+| Feature | MySQL Version | Usage |
+|---------|---------------|-------|
+| RANGE Partitioning | 5.1+ | Year-based data partitioning |
+| Window Functions (LAG) | 8.0+ | Temperature delta calculation |
+| CHECK Constraints | 8.0.16+ | Data validation for `coberturaNubes` |
+| Composite Indexes | All | Performance optimization |
+
+## Data Files
+
+### Input Data Files
+
+The project requires the following data files:
+
+<Accordion title="OFEI1204.txt">
+**Format**: Custom text format with agent-based sections
+
+**Content**: Power plant generation data
+- Agent names (e.g., "AGENTE: AES CHIVOR")
+- Plant records with 24 hourly generation values
+- 305 plant records total
+
+**Size**: ~70KB
+
+**Location**: `/content/drive/MyDrive/Prueba_tecnica/Datos3/`
+</Accordion>
+
+<Accordion title="Datos Maestros VF.xlsx">
+**Format**: Excel workbook
+
+**Content**: Master data for power plants
+- Agent names and plant identifiers
+- Plant types (Hidro, Termo, Filo, Menor)
+- Central names for matching
+
+**Columns Used**:
+- Nombre visible Agente
+- AGENTE (OFEI)
+- CENTRAL (dDEC, dSEGDES, dPRU…)
+- Tipo de central (Hidro, Termo, Filo, Menor)
+</Accordion>
+
+<Accordion title="dDEC1204.TXT">
+**Format**: CSV text file
+
+**Content**: Generation declaration data
+- Central names
+- 24 hourly generation values (H1 to H24)
+
+**Encoding**: latin-1
+</Accordion>
+
+<Accordion title="train.csv & test.csv">
+**Format**: CSV files
+
+**Content**: Fraud detection datasets
+- Training data with FRAUDE target variable
+- Test data without target (for predictions)
+- Multiple numeric and categorical features
+
+**Size**: Training set has 2,965 records for the validation shown in results
+</Accordion>
+
+## Google Colab Setup
+
+### Mounting Google Drive
+
+The project is configured for Google Colab with data stored in Google Drive:
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+### File Paths
+
+All file paths in the notebook reference Google Drive:
+
+```python
+# Example paths
+ruta = "/content/drive/MyDrive/Prueba_tecnica/Datos3/OFEI1204.txt"
+train = pd.read_csv("/content/drive/MyDrive/Prueba_tecnica/Datos3/train.csv")
+```
+
+<Warning>
+If running locally, update all file paths to match your local directory structure.
+</Warning>
+
+## Local Environment Setup
+
+### Running Outside Google Colab
+
+To run the project in a local Python environment:
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install pandas scikit-learn jupyter openpyxl
+    ```
+  </Step>
+  
+  <Step title="Download data files">
+    Place all required data files in a local directory (e.g., `./data/`)
+  </Step>
+  
+  <Step title="Update file paths">
+    Modify all file paths in the notebook to reference your local data directory
+    
+    ```python
+    # Change from:
+    ruta = "/content/drive/MyDrive/Prueba_tecnica/Datos3/OFEI1204.txt"
+    
+    # To:
+    ruta = "./data/OFEI1204.txt"
+    ```
+  </Step>
+  
+  <Step title="Launch Jupyter">
+    ```bash
+    jupyter notebook Prueba_tecnica_Dataknow.ipynb
+    ```
+  </Step>
+</Steps>
+
+## MySQL Database Setup
+
+### Creating the Database
+
+```sql
+CREATE DATABASE meteorologia;
+USE meteorologia;
+```
+
+### Setting Permissions
+
+Ensure your MySQL user has the following privileges:
+
+```sql
+GRANT CREATE, ALTER, INSERT, UPDATE, SELECT, DROP
+ON meteorologia.* 
+TO 'your_user'@'localhost';
+
+FLUSH PRIVILEGES;
+```
+
+### Partitioning Prerequisites
+
+<Info>
+RANGE partitioning requires the partition key to be part of the primary key or included in all unique indexes.
+</Info>
+
+## System Resources
+
+### Minimum Requirements
+
+- **RAM**: 4 GB (8 GB recommended for ML training)
+- **Storage**: 500 MB for data files and outputs
+- **CPU**: Any modern multi-core processor (Random Forest benefits from multiple cores)
+
+### Google Colab Resources
+
+Google Colab provides:
+- 12 GB RAM
+- Free GPU (not required for this project)
+- 100 GB temporary storage
+
+## Encoding Considerations
+
+The project uses **latin-1 encoding** for text files to handle Spanish characters:
+
+```python
+with open(ruta, "r", encoding="latin-1") as file:
+    # ...
+```
+
+<Tip>
+If you encounter encoding errors, verify that your data files use latin-1 or UTF-8 encoding.
+</Tip>
+
+## Verification
+
+### Testing Your Environment
+
+Run this script to verify all dependencies are installed:
+
+```python
+import sys
+
+# Check Python version
+print(f"Python version: {sys.version}")
+
+# Check pandas
+import pandas as pd
+print(f"pandas version: {pd.__version__}")
+
+# Check scikit-learn
+import sklearn
+print(f"scikit-learn version: {sklearn.__version__}")
+
+# Check if all required components are available
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+
+print("\n✓ All dependencies are installed correctly!")
+```
+
+Expected output:
+```
+Python version: 3.x.x
+pandas version: 1.x.x or higher
+scikit-learn version: 0.24.x or higher
+
+✓ All dependencies are installed correctly!
+```
+
+## Next Steps
+
+Once your environment meets all requirements:
+
+1. Review the [Quickstart Guide](/quickstart) to run the project
+2. Explore [ETL Pipelines](/etl/data-loading) documentation
+3. Understand [Database Design](/database/schema-design) decisions
+4. Study the [Fraud Detection Model](/ml/model-overview)

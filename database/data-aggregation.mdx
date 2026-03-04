@@ -1,0 +1,505 @@
+---
+title: 'Data Aggregation'
+description: 'Daily aggregation logic and temperature delta calculations using window functions'
+---
+
+## Overview
+
+The meteorological system aggregates hourly weather observations into daily summaries for trend analysis and reporting. This involves temperature unit conversion, statistical aggregations, and calculating temperature changes over time using SQL window functions.
+
+## Daily Aggregation Table
+
+### Table Structure
+
+The `clima_diario_f` table stores daily aggregated weather data with temperatures in Fahrenheit.
+
+```sql
+CREATE TABLE clima_diario_f (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(100) NOT NULL,
+    fecha DATE NOT NULL,
+    temperatura_f DECIMAL(6,2) NOT NULL,
+    cobertura_nubes VARCHAR (20) CHECK (cobertura_nubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indice_uv DECIMAL(4,2),
+    presion_atmosferica DECIMAL(7,2),
+    velocidad_viento_nudos DECIMAL(5,2),
+    
+    UNIQUE(localidad, fecha)
+);
+```
+
+### Design Differences from Source Table
+
+| Aspect | clima (hourly) | clima_diario_f (daily) |
+|--------|----------------|------------------------|
+| **Granularity** | `fechaHora DATETIME` | `fecha DATE` |
+| **Temperature** | `tempCelsius DECIMAL(5,2)` | `temperatura_f DECIMAL(6,2)` |
+| **Temperature Unit** | Celsius | Fahrenheit |
+| **Cloud Coverage** | `coberturaNubes` | `cobertura_nubes` |
+| **Unique Constraint** | `(localidad, fechaHora)` | `(localidad, fecha)` |
+| **Purpose** | Raw observations | Daily aggregates |
+
+---
+
+## Aggregation Logic
+
+### Complete Aggregation Query
+
+```sql
+INSERT INTO clima_diario_f (
+    localidad,
+    pais,
+    fecha,
+    temperatura_f,
+    cobertura_nubes,
+    indice_uv,
+    presion_atmosferica,
+    velocidad_viento_nudos
+)
+SELECT 
+    localidad,
+    pais,
+    DATE(fechaHora) AS fecha,
+    ROUND((AVG(tempCelsius) * 9/5) + 32, 2) AS temperatura_f,
+    MAX(coberturaNubes),
+    AVG(indiceUv),
+    AVG(presionAtmosferica),
+    AVG(velocidadVientoNudos)
+FROM clima
+GROUP BY localidad, DATE(fechaHora);
+```
+
+### Aggregation Components
+
+#### 1. Temperature Conversion and Averaging
+
+```sql
+ROUND((AVG(tempCelsius) * 9/5) + 32, 2) AS temperatura_f
+```
+
+**Process**:
+1. Calculate average Celsius temperature for the day: `AVG(tempCelsius)`
+2. Convert to Fahrenheit: `(celsius * 9/5) + 32`
+3. Round to 2 decimal places: `ROUND(..., 2)`
+
+**Example**:
+- Hourly temps for Bogota on 2025-01-01: 15°C, 18°C, 22°C, 20°C
+- Average: (15 + 18 + 22 + 20) / 4 = 18.75°C
+- Fahrenheit: (18.75 × 9/5) + 32 = 65.75°F
+
+**Formula Explanation**:
+- Multiply by 9/5 (or 1.8) to convert Celsius scale to Fahrenheit scale
+- Add 32 to adjust for the offset between scales (0°C = 32°F)
+
+#### 2. Date Grouping
+
+```sql
+DATE(fechaHora) AS fecha
+GROUP BY localidad, DATE(fechaHora)
+```
+
+**Process**:
+- Extract date portion from timestamp: `DATE(fechaHora)`
+- Group all hourly observations from the same location and day
+- Example: '2025-01-01 08:00:00', '2025-01-01 14:00:00', '2025-01-01 20:00:00' → '2025-01-01'
+
+#### 3. Cloud Coverage (Maximum)
+
+```sql
+MAX(coberturaNubes)
+```
+
+**Logic**: Select the maximum cloud coverage observed during the day.
+
+**Ordering** (implicit in VARCHAR comparison):
+- 'Minima' < 'Parcial' < 'Total'
+
+**Rationale**: Daily summary should reflect the worst/maximum cloud coverage for weather planning purposes.
+
+**Example**:
+- Hourly observations: 'Minima', 'Parcial', 'Parcial', 'Total'
+- Daily summary: 'Total'
+
+#### 4. Environmental Metrics (Averages)
+
+```sql
+AVG(indiceUv),
+AVG(presionAtmosferica),
+AVG(velocidadVientoNudos)
+```
+
+**Rationale**: For continuous measurements, daily averages provide representative values:
+- **UV Index**: Average exposure throughout the day
+- **Atmospheric Pressure**: Mean pressure trends
+- **Wind Speed**: Average wind conditions
+
+#### 5. Location Context
+
+```sql
+localidad,
+pais
+```
+
+**Note**: These are grouped dimensions, not aggregated. All observations for a location-date combination share the same `localidad` and `pais`.
+
+---
+
+## Temperature Delta Calculations
+
+### Purpose
+
+Calculate temperature change from the previous observation for the same location, enabling trend analysis and detecting rapid weather changes.
+
+### Adding Delta Columns
+
+#### Hourly Table (Celsius)
+
+```sql
+ALTER TABLE clima
+ADD COLUMN delta_temp_c DECIMAL(6,2);
+```
+
+#### Daily Table (Fahrenheit)
+
+```sql
+ALTER TABLE clima_diario_f
+ADD COLUMN delta_temp_f DECIMAL(6,2);
+```
+
+**Data Type**: `DECIMAL(6,2)` allows for:
+- Negative deltas (temperature drops): -9999.99
+- Positive deltas (temperature rises): +9999.99
+- Precision to 0.01 degrees
+
+---
+
+## Window Function Approach
+
+### Hourly Delta Calculation
+
+```sql
+UPDATE clima c
+JOIN (
+    SELECT 
+        id,
+        tempCelsius -
+        LAG(tempCelsius) OVER (
+            PARTITION BY localidad
+            ORDER BY fechaHora
+        ) AS delta
+    FROM clima
+) t ON c.id = t.id
+SET c.delta_temp_c = t.delta;
+```
+
+### Daily Delta Calculation
+
+```sql
+UPDATE clima_diario_f cd
+JOIN (
+    SELECT 
+        id,
+        temperatura_f -
+        LAG(temperatura_f) OVER (
+            PARTITION BY localidad
+            ORDER BY fecha
+        ) AS delta
+    FROM clima_diario_f
+) t ON cd.id = t.id
+SET cd.delta_temp_f = t.delta;
+```
+
+---
+
+## Understanding LAG Window Function
+
+### Syntax
+
+```sql
+LAG(column_name) OVER (
+    PARTITION BY partition_column
+    ORDER BY order_column
+)
+```
+
+### Components
+
+#### LAG Function
+
+**Purpose**: Access data from a previous row in the result set without using a self-join.
+
+**Returns**: The value of `column_name` from the previous row, or NULL if no previous row exists.
+
+#### PARTITION BY localidad
+
+**Purpose**: Create separate "windows" for each location.
+
+**Effect**: LAG only looks at previous rows **within the same location**, not across different locations.
+
+**Example**:
+```
+Bogota:   [18°C] → [20°C] → [22°C]
+Medellin: [25°C] → [27°C] → [26°C]
+```
+
+Bogota's first measurement won't incorrectly compare to Medellin's last measurement.
+
+#### ORDER BY fechaHora (or fecha)
+
+**Purpose**: Define which row is "previous" based on chronological order.
+
+**Effect**: LAG retrieves the temperature from the immediately preceding timestamp for that location.
+
+---
+
+## Delta Calculation Walkthrough
+
+### Example Data: Bogota Hourly Temperatures
+
+| id | localidad | fechaHora | tempCelsius | LAG(tempCelsius) | delta_temp_c |
+|----|-----------|-----------|-------------|------------------|-------------|
+| 1 | Bogota | 2025-01-01 08:00 | 19.00 | NULL | NULL |
+| 2 | Bogota | 2025-01-20 08:00 | 20.00 | 19.00 | +1.00 |
+| 3 | Bogota | 2025-02-15 09:00 | 22.00 | 20.00 | +2.00 |
+| 4 | Bogota | 2025-03-10 10:00 | 25.00 | 22.00 | +3.00 |
+| 5 | Bogota | 2026-01-01 07:00 | 18.00 | 25.00 | -7.00 |
+
+### Calculation Details
+
+**Row 1** (id=1):
+- Current: 19°C
+- Previous: NULL (first observation for Bogota)
+- Delta: NULL
+
+**Row 2** (id=2):
+- Current: 20°C
+- Previous: 19°C (from id=1)
+- Delta: 20 - 19 = **+1.00°C**
+- Interpretation: Temperature increased by 1 degree
+
+**Row 5** (id=5):
+- Current: 18°C
+- Previous: 25°C (from id=4)
+- Delta: 18 - 25 = **-7.00°C**
+- Interpretation: Significant temperature drop of 7 degrees
+
+---
+
+## Query Pattern Breakdown
+
+### Step 1: Subquery with Window Function
+
+```sql
+SELECT 
+    id,
+    tempCelsius -
+    LAG(tempCelsius) OVER (
+        PARTITION BY localidad
+        ORDER BY fechaHora
+    ) AS delta
+FROM clima
+```
+
+**Output**: Temporary result set with `id` and calculated `delta` for each row.
+
+### Step 2: JOIN to Original Table
+
+```sql
+UPDATE clima c
+JOIN (...subquery...) t ON c.id = t.id
+```
+
+**Purpose**: Match each calculated delta back to its corresponding row using the unique `id`.
+
+### Step 3: UPDATE
+
+```sql
+SET c.delta_temp_c = t.delta
+```
+
+**Effect**: Store the calculated delta in the `delta_temp_c` column.
+
+---
+
+## Use Cases for Delta Analysis
+
+### 1. Rapid Weather Change Detection
+
+```sql
+SELECT localidad, fechaHora, tempCelsius, delta_temp_c
+FROM clima
+WHERE ABS(delta_temp_c) > 5
+ORDER BY ABS(delta_temp_c) DESC;
+```
+
+**Purpose**: Identify locations with temperature swings exceeding 5°C, indicating unstable weather.
+
+### 2. Warming/Cooling Trends
+
+```sql
+SELECT 
+    localidad,
+    DATE(fechaHora) as fecha,
+    SUM(delta_temp_c) as cambio_total_dia
+FROM clima
+GROUP BY localidad, DATE(fechaHora)
+HAVING SUM(delta_temp_c) > 10;
+```
+
+**Purpose**: Find days where total temperature change exceeded 10°C (sum of all deltas).
+
+### 3. Consecutive Increase/Decrease Patterns
+
+```sql
+SELECT localidad, fechaHora, tempCelsius, delta_temp_c
+FROM clima
+WHERE delta_temp_c > 0
+AND localidad = 'Bogota'
+ORDER BY fechaHora;
+```
+
+**Purpose**: Identify continuous warming patterns for a specific location.
+
+### 4. Daily Volatility Analysis
+
+```sql
+SELECT 
+    localidad,
+    fecha,
+    temperatura_f,
+    delta_temp_f,
+    CASE 
+        WHEN ABS(delta_temp_f) > 10 THEN 'High Volatility'
+        WHEN ABS(delta_temp_f) > 5 THEN 'Moderate Volatility'
+        ELSE 'Stable'
+    END as volatility_level
+FROM clima_diario_f
+ORDER BY localidad, fecha;
+```
+
+**Purpose**: Classify daily temperature changes for weather stability reporting.
+
+---
+
+## Advantages of Window Functions
+
+### vs. Self-Joins
+
+**Traditional Self-Join Approach**:
+```sql
+-- Less efficient alternative
+SELECT 
+    c1.id,
+    c1.tempCelsius - c2.tempCelsius AS delta
+FROM clima c1
+LEFT JOIN clima c2 ON c1.localidad = c2.localidad
+    AND c2.fechaHora = (
+        SELECT MAX(fechaHora)
+        FROM clima
+        WHERE localidad = c1.localidad
+        AND fechaHora < c1.fechaHora
+    );
+```
+
+**Window Function Approach**:
+```sql
+-- More efficient and readable
+SELECT 
+    id,
+    tempCelsius - LAG(tempCelsius) OVER (
+        PARTITION BY localidad ORDER BY fechaHora
+    ) AS delta
+FROM clima;
+```
+
+### Benefits
+
+1. **Performance**: Single pass through data vs. multiple table scans
+2. **Readability**: Intent is clear and concise
+3. **Correctness**: Handles edge cases (first row) automatically
+4. **Flexibility**: Easy to access rows at different offsets (LAG(col, 2) for 2 rows back)
+
+---
+
+## Verification Queries
+
+### Check Daily Aggregation Results
+
+```sql
+SELECT * FROM clima_diario_f;
+```
+
+### Verify Temperature Deltas
+
+```sql
+-- Check hourly deltas
+SELECT id, localidad, fechaHora, tempCelsius, delta_temp_c
+FROM clima
+ORDER BY localidad, fechaHora;
+
+-- Check daily deltas
+SELECT id, localidad, fecha, temperatura_f, delta_temp_f
+FROM clima_diario_f
+ORDER BY localidad, fecha;
+```
+
+### Validate Conversion Formula
+
+```sql
+SELECT 
+    localidad,
+    DATE(fechaHora) as fecha,
+    AVG(tempCelsius) as avg_celsius,
+    ROUND((AVG(tempCelsius) * 9/5) + 32, 2) as calculated_f,
+    (SELECT temperatura_f 
+     FROM clima_diario_f 
+     WHERE localidad = c.localidad 
+     AND fecha = DATE(c.fechaHora)) as stored_f
+FROM clima c
+GROUP BY localidad, DATE(fechaHora);
+```
+
+---
+
+## Best Practices
+
+### 1. Aggregation Scheduling
+
+For production systems, run aggregation as a scheduled job:
+```sql
+-- Daily at midnight, aggregate previous day's data
+INSERT INTO clima_diario_f (...)
+SELECT ...
+FROM clima
+WHERE DATE(fechaHora) = CURDATE() - INTERVAL 1 DAY
+GROUP BY localidad;
+```
+
+### 2. Incremental Updates
+
+Avoid re-aggregating all historical data:
+```sql
+-- Only aggregate new dates
+INSERT INTO clima_diario_f (...)
+SELECT ...
+FROM clima
+WHERE DATE(fechaHora) NOT IN (SELECT fecha FROM clima_diario_f)
+GROUP BY localidad, DATE(fechaHora);
+```
+
+### 3. Delta Calculation Timing
+
+Recalculate deltas after:
+- New data insertion
+- Data corrections
+- Historical data backfills
+
+### 4. Handling NULLs
+
+First observations will have NULL deltas - this is expected and correct:
+```sql
+SELECT COUNT(*) as records_with_no_prior_obs
+FROM clima
+WHERE delta_temp_c IS NULL;
+```

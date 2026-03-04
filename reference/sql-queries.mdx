@@ -1,0 +1,212 @@
+---
+title: SQL Query Examples
+description: SQL query examples for weather database operations
+---
+
+## Table Creation
+
+Creating the main weather table with constraints.
+
+```sql
+CREATE DATABASE meteorologia;
+
+USE meteorologia;
+
+CREATE TABLE clima (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(50) NOT NULL DEFAULT 'Colombia',
+    tempCelsius DECIMAL(5,2) NOT NULL,
+    fechaHora DATETIME NOT NULL,
+    coberturaNubes VARCHAR (20) CHECK (coberturaNubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indiceUv DECIMAL (4 , 2),
+    presionAtmosferica DECIMAL (7 , 2),
+    velocidadVientoNudos DECIMAL (5 , 2),
+    
+    CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+);
+```
+
+**Key Features:**
+- Auto-incrementing primary key
+- Check constraint for cloud coverage values
+- Unique constraint on location + datetime combination
+- Default value for country field
+
+---
+
+## Data Insertion
+
+Inserting sample weather data for Colombian cities.
+
+```sql
+INSERT INTO clima (
+    localidad,
+    tempCelsius,
+    fechaHora,
+    coberturaNubes,
+    indiceUv,
+    presionAtmosferica,
+    velocidadVientoNudos
+)
+VALUES
+('Bogota', 19, '2025-01-01 08:00:00', 'Parcial', 3.5, 1012.2, 9.5),
+('Bogota', 20, '2025-01-20 08:00:00', 'Parcial', 7.5, 1012.3, 12.4),
+('Medellin', 23, '2024-05-01 08:00:00', 'Parcial', 5.5, 1007.2, 8.5),
+('Medellin', 28, '2024-01-20 07:30:00', 'Minima', 10.0, 1008.9, 8.4),
+('Cali', 28, '2025-02-21 07:00:00', 'Minima', 7.0, 1009.5, 12.0),
+('Cartagena', 33, '2025-02-01 08:00:00', 'Total', 8.8, 1010.8, 10.5);
+```
+
+---
+
+## Aggregation Query
+
+Creating daily aggregated weather data with temperature conversion.
+
+```sql
+CREATE TABLE clima_diario_f (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100) NOT NULL,
+    pais VARCHAR(100) NOT NULL,
+    fecha DATE NOT NULL,
+    temperatura_f DECIMAL(6,2) NOT NULL,
+    cobertura_nubes VARCHAR (20) CHECK (cobertura_nubes IN ('Minima','Parcial','Total')) NOT NULL,
+    indice_uv DECIMAL(4,2),
+    presion_atmosferica DECIMAL(7,2),
+    velocidad_viento_nudos DECIMAL(5,2),
+    
+    UNIQUE(localidad, fecha)
+);
+
+INSERT INTO clima_diario_f (
+    localidad,
+    pais,
+    fecha,
+    temperatura_f,
+    cobertura_nubes,
+    indice_uv,
+    presion_atmosferica,
+    velocidad_viento_nudos
+)
+SELECT 
+    localidad,
+    pais,
+    DATE(fechaHora) AS fecha,
+    ROUND((AVG(tempCelsius) * 9/5) + 32, 2) AS temperatura_f,
+    MAX(coberturaNubes),
+    AVG(indiceUv),
+    AVG(presionAtmosferica),
+    AVG(velocidadVientoNudos)
+FROM clima
+GROUP BY localidad, DATE(fechaHora);
+```
+
+**Operations:**
+- Groups data by location and date
+- Converts Celsius to Fahrenheit
+- Averages numeric weather metrics
+- Selects maximum cloud coverage per day
+
+---
+
+## Window Function: LAG
+
+Calculating temperature change from previous reading using window functions.
+
+```sql
+-- Add column for temperature delta
+ALTER TABLE clima
+ADD COLUMN delta_temp_c DECIMAL(6,2);
+
+-- Update with LAG calculation
+UPDATE clima c
+JOIN (
+    SELECT 
+        id,
+        tempCelsius -
+        LAG(tempCelsius) OVER (
+            PARTITION BY localidad
+            ORDER BY fechaHora
+        ) AS delta
+    FROM clima
+) t ON c.id = t.id
+SET c.delta_temp_c = t.delta;
+```
+
+**For daily Fahrenheit table:**
+
+```sql
+ALTER TABLE clima_diario_f
+ADD COLUMN delta_temp_f DECIMAL(6,2);
+
+UPDATE clima_diario_f cd
+JOIN (
+    SELECT 
+        id,
+        temperatura_f -
+        LAG(temperatura_f) OVER (
+            PARTITION BY localidad
+            ORDER BY fecha
+        ) AS delta
+    FROM clima_diario_f
+) t ON cd.id = t.id
+SET cd.delta_temp_f = t.delta;
+```
+
+---
+
+## Query Optimization: Indexing
+
+Creating composite index for date range queries.
+
+```sql
+CREATE INDEX idx_localidad_fecha
+ON clima(localidad, fechaHora);
+
+SELECT *
+FROM clima
+WHERE fechaHora BETWEEN '2025-01-01' AND '2025-02-21';
+```
+
+**Purpose:** Improves performance for queries filtering by location and date range.
+
+---
+
+## Query Optimization: Partitioning
+
+Partitioning table by year for improved query performance.
+
+```sql
+ALTER TABLE clima
+PARTITION BY RANGE (YEAR(fechaHora)) (
+    PARTITION p2024 VALUES LESS THAN (2025),
+    PARTITION p2025 VALUES LESS THAN (2026),
+    PARTITION pMax VALUES LESS THAN MAXVALUE
+);
+```
+
+**Benefits:**
+- Faster queries on specific year ranges
+- Easier data archival and maintenance
+- Improved query planning for date-based filters
+
+---
+
+## Dimensional Model
+
+Separating location data into dimension table.
+
+```sql
+CREATE TABLE dim_localidad (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100),
+    pais VARCHAR(100)
+);
+
+-- In the main clima table, add foreign key reference:
+-- localidad_id INT,
+-- FOREIGN KEY (localidad_id) REFERENCES dim_localidad(id)
+```
+
+**Purpose:** Normalize location data and reduce redundancy in fact table.

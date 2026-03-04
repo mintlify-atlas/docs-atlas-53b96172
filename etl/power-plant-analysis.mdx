@@ -1,0 +1,145 @@
+---
+title: "Power Plant Analysis"
+description: "Analyze hourly generation patterns and filter active power plants"
+---
+
+## Overview
+
+This module performs analysis on the merged power plant dataset to identify active generation, calculate daily totals, and produce a final filtered dataset for reporting.
+
+## Analysis Pipeline
+
+The analysis follows these steps:
+1. Calculate hourly sums across all hours
+2. Filter plants with generation > 0
+3. Produce final dataframe with aggregated metrics
+
+## Hourly Sum Calculation
+
+```python
+# 6. Calcular Suma Horizontal (H1 a H24)
+columnas_horas = [f'H{i}' for i in range(1, 25)]
+df_merged['Suma_Total'] = df_merged[columnas_horas].sum(axis=1)
+```
+
+### Calculation Logic
+- **Columns**: H1 through H24 (24 hourly columns)
+- **Operation**: Row-wise sum using `axis=1`
+- **Result**: Total daily generation per plant in MWh
+
+### Example Calculation
+For a plant with constant 364 MW generation:
+```
+H1 + H2 + ... + H24 = 364 × 24 = 8,736 MWh
+```
+
+## Filtering Active Plants
+
+```python
+# 7. Seleccionar solo plantas con suma mayor a cero
+df_resultado = df_merged[df_merged['Suma_Total'] > 0].copy()
+```
+
+### Filter Criteria
+- **Condition**: `Suma_Total > 0`
+- **Purpose**: Remove plants with no generation during the analysis period
+- **Result**: Dataset containing only active plants
+
+## Final Dataframe Structure
+
+The analysis produces a comprehensive dataset combining:
+- Master data (agent info, plant type)
+- Hourly generation data (H1-H24)
+- Calculated metrics (Suma_Total)
+
+### Column Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| Nombre visible Agente | string | Display name (e.g., "EMGESA") |
+| AGENTE (OFEI) | string | Official agent identifier |
+| CENTRAL (dDEC, dSEGDES, dPRU…) | string | Master data plant name |
+| Tipo de central (Hidro, Termo, Filo, Menor) | string | Plant type (H/T) |
+| CENTRAL | string | Generation data plant name |
+| H1-H24 | float | Hourly generation values (MW) |
+| Suma_Total | float | Daily total generation (MWh) |
+
+## Analysis Results
+
+### Sample Output
+
+```python
+df_resultado
+```
+
+```
+   Nombre visible Agente AGENTE (OFEI) CENTRAL (dDEC, dSEGDES, dPRU…) 
+0                 EMGESA   EMGESA S.A.                        BETANIA   
+1                 EMGESA   EMGESA S.A.                        BETANIA   
+2                 EMGESA   EMGESA S.A.                        BETANIA   
+6                 EMGESA   EMGESA S.A.                       ELQUIMBO   
+7                 EMGESA   EMGESA S.A.                       ELQUIMBO   
+8                 EMGESA   EMGESA S.A.                         GUAVIO   
+9                 EMGESA   EMGESA S.A.                         GUAVIO   
+...
+
+   Tipo de central  CENTRAL  H1   H2   H3   H4  ...  H20   H21  H22  H23  H24  Suma_Total
+0               H  BETANIA  364  364  364  364  ...  364   364  364  364  364        8736
+1               H  BETANIA  364  364  364  364  ...  364   364  364  364  364        8736
+2               H  BETANIA  364  364  364  364  ...  364   364  364  364  364        8736
+6               H ELQUIMBO   85   85   85   85  ...   85    85   85   85   85        2040
+7               H ELQUIMBO   85   85   85   85  ...   85    85   85   85   85        2040
+8               H   GUAVIO    0    0    0    0  ...  1002  780  140    0    0        4325
+9               H   GUAVIO    0    0    0    0  ...  1002  780  140    0    0        4325
+...
+```
+
+### Key Statistics
+
+- **Total Records**: 16 rows
+- **Unique Plants**: 4 (BETANIA, ELQUIMBO, GUAVIO, PAGUA)
+- **All Plants**: Type H (Hydroelectric)
+- **Agent**: EMGESA / EMGESA S.A.
+
+## Generation Patterns
+
+### Constant Generation (BETANIA, ELQUIMBO, PAGUA)
+These plants show stable generation across all hours:
+```
+BETANIA:  364 MW × 24h = 8,736 MWh
+ELQUIMBO:  85 MW × 24h = 2,040 MWh
+PAGUA:    600 MW × 24h = 14,400 MWh
+```
+
+### Variable Generation (GUAVIO)
+GUAVIO shows peaking behavior:
+- **Off-peak hours** (H1-H15): 0 MW
+- **Peak hours** (H16-H22): 120-1002 MW
+- **Night hours** (H23-H24): 0 MW
+- **Daily total**: 4,325 MWh
+
+This pattern indicates pumped-storage or peaking hydroelectric operation.
+
+## Usage Example
+
+```python
+# Get plants sorted by total generation
+top_plants = df_resultado.groupby('CENTRAL')['Suma_Total'].first().sort_values(ascending=False)
+
+print(top_plants)
+# Output:
+# PAGUA       14400.0
+# BETANIA      8736.0
+# GUAVIO       4325.0
+# ELQUIMBO     2040.0
+```
+
+## Output Dataset
+
+The `df_resultado` dataframe contains:
+- All EMGESA plants with active generation
+- Complete hourly generation profiles
+- Calculated daily totals
+- Master data enrichment (agent names, plant types)
+
+This dataset is ready for further analysis, visualization, or reporting.

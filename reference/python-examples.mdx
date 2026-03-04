@@ -1,0 +1,206 @@
+---
+title: Python Code Examples
+description: Real Python code examples from the data engineering technical test
+---
+
+## Data Loading from OFEI File
+
+This example shows how to parse a custom OFEI text file format containing power plant data.
+
+```python
+import pandas as pd
+
+# File path
+ruta = "/content/drive/MyDrive/Prueba_tecnica/Datos3/OFEI1204.txt"
+
+# List to store final records
+data = []
+
+# Variable to store current agent
+agente_actual = None
+
+with open(ruta, "r", encoding="latin-1") as file:
+    for line in file:
+        line = line.strip()
+
+        # Detect agent lines
+        if line.startswith("AGENTE:"):
+            agente_actual = line.replace("AGENTE:", "").strip()
+
+        # Process only lines containing ", D,"
+        elif ", D," in line:
+            partes = line.split(",")
+            planta = partes[0].strip()
+            tipo = partes[1].strip()
+
+            # Extract 24 hours
+            horas = [float(h.strip()) for h in partes[2:26]]
+
+            # Build record
+            registro = [agente_actual, tipo, planta] + horas
+
+            data.append(registro)
+
+# Create column names
+columnas = ["Agente", "Tipo", "Planta"] + [f"Hora_{i}" for i in range(1, 25)]
+
+# Create final DataFrame
+df_final = pd.DataFrame(data, columns=columnas)
+```
+
+**Output:** DataFrame with 305 rows × 27 columns (Agente, Tipo, Planta, Hora_1 through Hora_24)
+
+---
+
+## Pandas Merge Operation
+
+Merging master data with power plant generation data.
+
+```python
+import pandas as pd
+
+# 1. Load Master Data with requested columns
+cols_master = [
+    'Nombre visible Agente',
+    'AGENTE (OFEI)',
+    'CENTRAL (dDEC, dSEGDES, dPRU…)',
+    'Tipo de central (Hidro, Termo, Filo, Menor)'
+]
+
+df_master = pd.read_excel('/path/to/Datos Maestros VF.xlsx', usecols=cols_master)
+
+# 2. Filter by Agent (EMGESA) and Type (H or T)
+agentes = ['EMGESA', 'EMGESA S.A.']
+tipos = ['H', 'T']
+df_m_filt = df_master[
+    (df_master['AGENTE (OFEI)'].isin(agentes)) &
+    (df_master['Tipo de central (Hidro, Termo, Filo, Menor)'].isin(tipos))
+].copy()
+
+# 3. Load the TXT file
+nombres_columnas = ['CENTRAL'] + [f'H{i}' for i in range(1, 25)]
+
+df_ddec = pd.read_csv(
+    '/path/to/dDEC1204.TXT',
+    header=None,
+    names=nombres_columnas,
+    quotechar='"',
+    skipinitialspace=True,
+    encoding='latin-1'
+)
+
+# 4. Clean text to ensure proper merge
+df_m_filt['CENTRAL (dDEC, dSEGDES, dPRU…)'] = df_m_filt['CENTRAL (dDEC, dSEGDES, dPRU…)'].str.strip().str.upper()
+df_ddec['CENTRAL'] = df_ddec['CENTRAL'].str.strip().str.upper()
+
+# 5. Perform the Merge
+df_merged = pd.merge(
+    df_m_filt,
+    df_ddec,
+    left_on='CENTRAL (dDEC, dSEGDES, dPRU…)',
+    right_on='CENTRAL'
+)
+
+# 6. Calculate Horizontal Sum (H1 to H24)
+columnas_horas = [f'H{i}' for i in range(1, 25)]
+df_merged['Suma_Total'] = df_merged[columnas_horas].sum(axis=1)
+
+# 7. Select only plants with sum greater than zero
+df_resultado = df_merged[df_merged['Suma_Total'] > 0].copy()
+```
+
+**Result:** 16 rows with filtered EMGESA hydro and thermal plants with non-zero generation.
+
+---
+
+## Feature Engineering
+
+Data cleaning and feature engineering for fraud detection.
+
+```python
+# Data cleaning - Numeric variables
+numericas = X.select_dtypes(include=['int64','float64']).columns
+
+for col in numericas:
+    X.loc[:, col] = X[col].fillna(X[col].mean())  # Replace nulls with mean
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna(X[col].mean())
+
+# Data cleaning - Categorical variables
+categoricas = X.select_dtypes(include=['object']).columns
+
+for col in categoricas:
+    X.loc[:, col] = X[col].fillna("Desconocido")  # Replace nulls with "Desconocido"
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna("Desconocido")
+
+# One-hot encoding
+X = pd.get_dummies(X, drop_first=True)  # Convert categorical to binary
+X_test = pd.get_dummies(X_test, drop_first=True)
+
+X_test = X_test.reindex(columns=X.columns, fill_value=0)  # Align test columns
+```
+
+---
+
+## Model Training
+
+Random Forest classification for fraud detection.
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+
+# Split data into train and validation
+X_train, X_val, y_train, y_val = train_test_split(
+    X,  # Predictor variables
+    y,  # Target variable
+    test_size=0.2,  # 20% for validation
+    random_state=42,  # Seed for reproducibility
+    stratify=y  # Maintain class proportion
+)
+
+# Initialize Random Forest model
+model = RandomForestClassifier(
+    n_estimators=200,  # Number of trees
+    random_state=42,
+    class_weight='balanced'  # Adjust for class imbalance
+)
+
+# Train model
+model.fit(X_train, y_train)
+
+# Predictions on validation set
+y_val_pred = model.predict(X_val)
+y_val_proba = model.predict_proba(X_val)[:, 1]
+
+print("CONFUSION MATRIX")
+print(confusion_matrix(y_val, y_val_pred))
+
+print("\nCLASSIFICATION REPORT")
+print(classification_report(y_val, y_val_pred))
+
+print("\nAUC-ROC:", roc_auc_score(y_val, y_val_proba))
+
+# Train final model with all training data
+model.fit(X, y)
+
+# Threshold adjustment
+threshold = 0.5
+y_pred_test = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+
+# Save final result
+submission = pd.DataFrame({
+    "id": ids_test,
+    "FRAUDE": y_pred_test
+})
+
+submission.to_csv("/content/test_evaluado.csv", index=False)
+```
+
+**Performance:**
+- Accuracy: 95%
+- Precision (fraud): 92%
+- Recall (fraud): 88%
+- AUC-ROC: 0.988

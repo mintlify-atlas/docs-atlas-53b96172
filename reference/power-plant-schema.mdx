@@ -1,0 +1,118 @@
+---
+title: Power Plant Data Schema
+description: OFEI file format and power plant generation data structure
+---
+
+## OFEI File Format
+
+The OFEI (Oferta de Energía Inicial) file contains hourly power generation offers from Colombian power plants.
+
+### File Structure
+
+```
+AGENTE: [Agent Name]
+[PLANTA], [TIPO], [H1], [H2], ..., [H24]
+[PLANTA], [TIPO], [H1], [H2], ..., [H24]
+...
+```
+
+### Example Raw Data
+
+```
+AGENTE: AES CHIVOR
+CHIVOR1, D, 125.00, 125.00, 125.00, 125.00, ..., 125.00
+CHIVOR2, D, 125.00, 125.00, 125.00, 125.00, ..., 125.00
+
+AGENTE: EMGESA S.A.
+GUAVIO, D, 0.00, 0.00, 0.00, 0.00, ..., 0.00
+PAGUA, D, 600.00, 600.00, 600.00, 600.00, ..., 600.00
+```
+
+---
+
+## DataFrame Structure
+
+After parsing the OFEI file, the data is structured in a pandas DataFrame.
+
+### Column Schema
+
+| Column Name | Data Type | Description |
+|-------------|-----------|-------------|
+| `Agente` | string | Power generation agent/company name |
+| `Tipo` | string | Type code (typically "D" for generation) |
+| `Planta` | string | Power plant name |
+| `Hora_1` to `Hora_24` | float64 | Hourly power generation in MW |
+
+### Data Types
+
+```python
+Agente      object
+Tipo        object
+Planta      object
+Hora_1      float64
+Hora_2      float64
+...
+Hora_24     float64
+```
+
+---
+
+## Example Data Rows
+
+### Sample Records
+
+```python
+         Agente Tipo               Planta  Hora_1  Hora_2  Hora_3  ...  Hora_24
+0    AES CHIVOR    D              CHIVOR1  125.00  125.00  125.00  ...   125.00
+1    AES CHIVOR    D              CHIVOR2  125.00  125.00  125.00  ...   125.00
+2    AES CHIVOR    D              CHIVOR3  125.00  125.00  125.00  ...   125.00
+...
+300  VATIA S.A.    D             SANTIAGO    1.52    1.52    1.52  ...     1.52
+301  VATIA S.A.    D             INCAUCA1    8.50    8.50    8.50  ...     8.50
+302  VATIA S.A.    D  INGENIOPROVIDENCIA2   13.80   13.80   13.80  ...    13.80
+303   ZF CELSIA    D              FLORES1    0.00    0.00    0.00  ...     0.00
+304   ZF CELSIA    D             FLORES4B  450.00  450.00  450.00  ...   450.00
+```
+
+**Total:** 305 rows × 27 columns
+
+---
+
+## Power Plant Agents
+
+Sample of agents represented in the dataset:
+
+- **AES CHIVOR** - Multiple CHIVOR units (CHIVOR1-5)
+- **EMGESA S.A.** - BETANIA, ELQUIMBO, GUAVIO, PAGUA plants
+- **VATIA S.A.** - SANTIAGO, INCAUCA1, INGENIOPROVIDENCIA2
+- **ZF CELSIA** - FLORES1, FLORES4B
+
+---
+
+## Usage Example
+
+```python
+import pandas as pd
+
+# After loading OFEI data
+df_final = pd.DataFrame(data, columns=columnas)
+
+# Basic statistics
+print(f"Total plants: {len(df_final)}")
+print(f"Total agents: {df_final['Agente'].nunique()}")
+
+# Calculate total daily generation per plant
+hora_cols = [f'Hora_{i}' for i in range(1, 25)]
+df_final['Total_MW'] = df_final[hora_cols].sum(axis=1)
+
+# Filter by agent
+emgesa_plants = df_final[df_final['Agente'] == 'EMGESA S.A.']
+```
+
+---
+
+## Related Files
+
+- **Master Data:** Contains metadata about plants (type: Hydro/Thermal, visible name)
+- **dDEC Files:** Declared available capacity per plant
+- **OFEI Files:** Energy offers per hour

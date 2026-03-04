@@ -1,0 +1,67 @@
+---
+title: 'Model Overview'
+description: 'Overview of the fraud detection model'
+---
+
+## Problem Description
+
+This project implements a **fraud detection model** to identify fraudulent transactions in a dataset. The model is trained to classify transactions as either fraudulent (FRAUDE=1) or legitimate (FRAUDE=0).
+
+## Model Architecture
+
+The model uses a **RandomForestClassifier** with the following configuration:
+
+- **Algorithm**: Random Forest (ensemble of decision trees)
+- **Number of estimators**: 200 trees
+- **Class weight**: Balanced (to handle class imbalance)
+- **Random state**: 42 (for reproducibility)
+
+## Key Features
+
+### Handling Class Imbalance
+
+The dataset exhibits class imbalance between fraudulent and legitimate transactions. To address this:
+- `class_weight='balanced'` automatically adjusts weights inversely proportional to class frequencies
+- This ensures the model doesn't bias toward the majority class
+
+### Model Performance
+
+On the validation set, the model achieves:
+- **Accuracy**: 95%
+- **AUC-ROC Score**: 0.988 (98.8%)
+
+These metrics indicate excellent discriminative power and overall performance.
+
+## Model Initialization Code
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+# Initialize Random Forest model
+model = RandomForestClassifier(
+    n_estimators=200,        # Number of trees in the forest
+    random_state=42,         # Seed for reproducibility
+    class_weight='balanced'  # Adjust weight of classes for imbalance
+)
+
+# Train model with training data
+model.fit(X_train, y_train)
+```
+
+## Why Random Forest?
+
+Random Forest was chosen for this fraud detection task because:
+
+1. **Robustness**: Handles both numerical and categorical features well
+2. **Non-linearity**: Captures complex patterns in transaction data
+3. **Overfitting resistance**: Ensemble approach reduces variance
+4. **Feature importance**: Provides insights into which features drive predictions
+5. **Class imbalance handling**: Built-in support through `class_weight` parameter
+
+## Next Steps
+
+To understand how the data is prepared for this model, see the [Data Preprocessing](/ml/data-preprocessing) page.
+
+For details on the training process, see [Model Training](/ml/model-training).
+
+For performance metrics and interpretation, see [Evaluation](/ml/evaluation).

@@ -1,122 +1,99 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dataknow Data Engineering Technical Test",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1e40af",
+    "light": "#3b82f6",
+    "dark": "#1e3a8a"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Jocesitho/Prueba_tecnica_dataknow_Jose_Arteaga"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Jocesitho/Prueba_tecnica_dataknow_Jose_Arteaga"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Overview",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Introduction",
             "pages": [
               "index",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
               "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "requirements"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Data Engineering",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "ETL Pipelines",
             "pages": [
-              "api-reference/introduction"
+              "etl/data-loading",
+              "etl/data-manipulation",
+              "etl/power-plant-analysis"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Database Design",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "database/schema-design",
+              "database/optimization-strategies",
+              "database/data-aggregation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Machine Learning",
+        "groups": [
+          {
+            "group": "Fraud Detection",
+            "pages": [
+              "ml/model-overview",
+              "ml/data-preprocessing",
+              "ml/model-training",
+              "ml/evaluation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Code Examples",
+            "pages": [
+              "reference/python-examples",
+              "reference/sql-queries"
+            ]
+          },
+          {
+            "group": "Data Schemas",
+            "pages": [
+              "reference/power-plant-schema",
+              "reference/weather-schema",
+              "reference/fraud-detection-schema"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,242 @@
+---
+title: Fraud Detection Data Schema
+description: Schema and structure for fraud detection dataset
+---
+
+## Dataset Overview
+
+The fraud detection dataset contains transaction data with various features used to predict fraudulent activity.
+
+### Files
+
+- **train.csv** - Training dataset with labels
+- **test.csv** - Test dataset without labels
+- **test_evaluado.csv** - Model predictions on test set
+
+---
+
+## Input Features
+
+The dataset includes various features describing transactions. Features are a mix of numeric and categorical variables.
+
+### Feature Selection
+
+```python
+# Load data
+train = pd.read_csv("train.csv")
+test = pd.read_csv("test.csv")
+
+# Identify common columns (excluding id and target)
+cols_comunes = train.columns.intersection(test.columns).tolist()
+features = [c for c in cols_comunes if c not in ['id', 'FRAUDE']]
+
+# Select features
+X = train[features].copy()
+y = train['FRAUDE']  # Target variable
+
+X_test = test[features].copy()
+ids_test = test['id']
+```
+
+### Feature Types
+
+#### Numeric Features
+
+```python
+numericas = X.select_dtypes(include=['int64','float64']).columns
+```
+
+Numeric features include transaction amounts, counts, ratios, and other quantitative metrics.
+
+**Treatment:**
+- Missing values filled with column mean
+- No scaling required for Random Forest model
+
+#### Categorical Features
+
+```python
+categoricas = X.select_dtypes(include=['object']).columns
+```
+
+Categorical features may include transaction types, merchant categories, location codes, etc.
+
+**Treatment:**
+- Missing values filled with "Desconocido" (Unknown)
+- One-hot encoded using `pd.get_dummies()`
+- Test set aligned with training columns
+
+---
+
+## Target Variable
+
+### FRAUDE Column
+
+| Value | Description |
+|-------|-------------|
+| `0` | Legitimate transaction |
+| `1` | Fraudulent transaction |
+
+**Data Type:** Integer (binary classification)
+
+### Class Distribution
+
+The dataset exhibits class imbalance, addressed using:
+
+```python
+model = RandomForestClassifier(
+    n_estimators=200,
+    class_weight='balanced'  # Adjusts for imbalanced classes
+)
+```
+
+---
+
+## Output Format
+
+### test_evaluado.csv
+
+Prediction file format with model results.
+
+#### Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint | Transaction identifier |
+| `FRAUDE` | integer | Predicted fraud label (0 or 1) |
+
+#### Example Data
+
+```csv
+id,FRAUDE
+98523068,0
+300237898,0
+943273308,1
+951645809,1
+963797516,1
+971691350,0
+971788614,0
+978266544,0
+979598220,0
+979672843,0
+```
+
+**Sample Statistics:**
+- Total records: 100
+- Predicted fraud (1): Varies by model performance
+- Predicted legitimate (0): Varies by model performance
+
+---
+
+## Data Processing Pipeline
+
+### 1. Missing Value Treatment
+
+```python
+# Numeric columns: fill with mean
+for col in numericas:
+    X.loc[:, col] = X[col].fillna(X[col].mean())
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna(X[col].mean())
+
+# Categorical columns: fill with "Desconocido"
+for col in categoricas:
+    X.loc[:, col] = X[col].fillna("Desconocido")
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna("Desconocido")
+```
+
+### 2. One-Hot Encoding
+
+```python
+X = pd.get_dummies(X, drop_first=True)
+X_test = pd.get_dummies(X_test, drop_first=True)
+
+# Align test columns with training
+X_test = X_test.reindex(columns=X.columns, fill_value=0)
+```
+
+### 3. Train-Test Split
+
+```python
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y  # Maintain class proportion
+)
+```
+
+---
+
+## Model Performance Metrics
+
+### Confusion Matrix
+
+```
+[[436  11]
+ [ 17 129]]
+```
+
+- True Negatives: 436
+- False Positives: 11
+- False Negatives: 17
+- True Positives: 129
+
+### Classification Report
+
+| Class | Precision | Recall | F1-Score | Support |
+|-------|-----------|--------|----------|----------|
+| 0 (Legitimate) | 0.96 | 0.98 | 0.97 | 447 |
+| 1 (Fraud) | 0.92 | 0.88 | 0.90 | 146 |
+| **Accuracy** | | | **0.95** | 593 |
+| **Macro Avg** | 0.94 | 0.93 | 0.94 | 593 |
+| **Weighted Avg** | 0.95 | 0.95 | 0.95 | 593 |
+
+### AUC-ROC Score
+
+**0.9881** - Excellent discrimination between fraud and legitimate transactions
+
+---
+
+## Usage Example
+
+### Generate Predictions
+
+```python
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+
+# Load and prepare data
+train = pd.read_csv("train.csv")
+test = pd.read_csv("test.csv")
+
+# ... feature engineering and preprocessing ...
+
+# Train model
+model = RandomForestClassifier(
+    n_estimators=200,
+    random_state=42,
+    class_weight='balanced'
+)
+model.fit(X, y)
+
+# Generate predictions
+threshold = 0.5
+y_pred_test = (model.predict_proba(X_test)[:, 1] >= threshold).astype(int)
+
+# Save results
+submission = pd.DataFrame({
+    "id": ids_test,
+    "FRAUDE": y_pred_test
+})
+submission.to_csv("test_evaluado.csv", index=False)
+```
+
+---
+
+## Data Quality Notes
+
+- **Missing Values:** Present in both numeric and categorical features
+- **Class Imbalance:** Fraud cases are minority class (addressed via `class_weight='balanced'`)
+- **Feature Consistency:** Test set features aligned with training set using `reindex()`
+- **Reproducibility:** Random state set to 42 for consistent results

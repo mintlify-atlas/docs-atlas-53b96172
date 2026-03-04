@@ -1,0 +1,224 @@
+---
+title: 'Model Evaluation'
+description: 'Performance metrics and interpretation of the fraud detection model'
+---
+
+## Overview
+
+This page presents the actual evaluation results from the fraud detection model on the validation set. All metrics are extracted directly from the notebook output.
+
+## Evaluation Code
+
+```python
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+
+# Generate predictions on validation set
+y_val_pred = model.predict(X_val)              # Binary predictions
+y_val_proba = model.predict_proba(X_val)[:, 1] # Probability scores
+
+# Calculate and display metrics
+print("CONFUSION MATRIX")
+print(confusion_matrix(y_val, y_val_pred))
+
+print("\nCLASSIFICATION REPORT")
+print(classification_report(y_val, y_val_pred))
+
+print("\nAUC-ROC:", roc_auc_score(y_val, y_val_proba))
+```
+
+## Confusion Matrix
+
+The confusion matrix shows actual vs. predicted classifications:
+
+```
+[[436  11]
+ [ 17 129]]
+```
+
+**Interpretation**:
+
+|                     | Predicted: Legitimate | Predicted: Fraud |
+|---------------------|----------------------|------------------|
+| **Actual: Legitimate** | 436 (True Negatives)  | 11 (False Positives) |
+| **Actual: Fraud**      | 17 (False Negatives)  | 129 (True Positives) |
+
+**Breakdown**:
+- **True Negatives (436)**: Legitimate transactions correctly identified
+- **True Positives (129)**: Fraudulent transactions correctly identified
+- **False Positives (11)**: Legitimate transactions incorrectly flagged as fraud
+- **False Negatives (17)**: Fraudulent transactions missed by the model
+
+**Key insights**:
+- The model correctly identifies most transactions (436 + 129 = 565 out of 593)
+- Only 11 false alarms (legitimate transactions flagged as fraud)
+- Only 17 fraud cases missed (11.6% of all fraud)
+
+## Classification Report
+
+Detailed per-class metrics:
+
+```
+              precision    recall  f1-score   support
+
+           0       0.96      0.98      0.97       447
+           1       0.92      0.88      0.90       146
+
+    accuracy                           0.95       593
+   macro avg       0.94      0.93      0.94       593
+weighted avg       0.95      0.95      0.95       593
+```
+
+### Metrics Explanation
+
+#### Class 0 (Legitimate Transactions)
+- **Precision: 0.96** (96%)
+  - Of all transactions predicted as legitimate, 96% actually are legitimate
+  - Formula: 436 / (436 + 17) = 0.96
+  - Low false positive rate
+
+- **Recall: 0.98** (98%)
+  - Of all actual legitimate transactions, 98% are correctly identified
+  - Formula: 436 / (436 + 11) = 0.98
+  - Excellent at finding legitimate transactions
+
+- **F1-Score: 0.97** (97%)
+  - Harmonic mean of precision and recall
+  - Balanced performance on legitimate class
+
+- **Support: 447**
+  - Number of legitimate transactions in validation set
+
+#### Class 1 (Fraudulent Transactions)
+- **Precision: 0.92** (92%)
+  - Of all transactions predicted as fraud, 92% actually are fraud
+  - Formula: 129 / (129 + 11) = 0.92
+  - When the model flags fraud, it's usually correct
+
+- **Recall: 0.88** (88%)
+  - Of all actual fraud cases, 88% are correctly detected
+  - Formula: 129 / (129 + 17) = 0.88
+  - Catches most fraud, but misses 12%
+
+- **F1-Score: 0.90** (90%)
+  - Harmonic mean of precision and recall
+  - Strong balanced performance on fraud class
+
+- **Support: 146**
+  - Number of fraudulent transactions in validation set
+
+#### Overall Metrics
+- **Accuracy: 0.95** (95%)
+  - Overall percentage of correct predictions
+  - Formula: (436 + 129) / 593 = 0.95
+  - 565 out of 593 transactions correctly classified
+
+- **Macro Average: 0.94**
+  - Simple average of metrics across both classes
+  - Treats both classes equally (regardless of support)
+
+- **Weighted Average: 0.95**
+  - Average weighted by support (number of samples per class)
+  - More representative for imbalanced datasets
+
+## AUC-ROC Score
+
+```
+AUC-ROC: 0.9881630964420337
+```
+
+**Result: 0.988 (98.8%)**
+
+### What is AUC-ROC?
+
+The Area Under the Receiver Operating Characteristic curve measures the model's ability to distinguish between classes:
+
+- **1.0**: Perfect classifier
+- **0.5**: Random guessing
+- **< 0.5**: Worse than random
+
+**Our score of 0.988** indicates:
+- Near-perfect discrimination between fraud and legitimate transactions
+- The model's probability scores are highly informative
+- 98.8% chance that a randomly chosen fraud case will have a higher predicted probability than a randomly chosen legitimate case
+
+### Why AUC-ROC Matters for Fraud Detection
+
+1. **Threshold-independent**: Evaluates model quality regardless of classification threshold
+2. **Imbalance-robust**: Works well with imbalanced datasets
+3. **Probability calibration**: Indicates how well probabilities reflect true risk
+4. **Business flexibility**: Allows adjusting thresholds based on cost of false positives vs. false negatives
+
+## Performance Summary
+
+| Metric | Value | Interpretation |
+|--------|-------|----------------|
+| **Accuracy** | 95% | Excellent overall performance |
+| **Precision (Fraud)** | 92% | When flagged as fraud, usually correct |
+| **Recall (Fraud)** | 88% | Catches most fraud cases |
+| **F1-Score (Fraud)** | 90% | Strong balanced performance |
+| **AUC-ROC** | 98.8% | Near-perfect discrimination |
+| **False Positive Rate** | 2.5% | 11 out of 447 legitimate transactions |
+| **False Negative Rate** | 11.6% | 17 out of 146 fraud cases missed |
+
+## Model Strengths
+
+1. **High accuracy (95%)**: Correctly classifies most transactions
+2. **Excellent AUC-ROC (98.8%)**: Near-perfect separation between classes
+3. **Strong precision on fraud (92%)**: Low false alarm rate
+4. **Good recall on fraud (88%)**: Catches majority of fraud cases
+5. **Balanced performance**: Both classes perform well (F1 scores: 0.97 and 0.90)
+
+## Areas for Improvement
+
+1. **Fraud recall (88%)**:
+   - 17 fraud cases missed
+   - Could lower threshold to catch more fraud (at cost of more false positives)
+   - Consider additional features or data sources
+
+2. **False negatives in fraud**:
+   - Missing 12% of fraud cases could be costly
+   - May need specialized techniques for rare fraud patterns
+   - Could implement anomaly detection as complementary approach
+
+## Business Impact
+
+In a fraud detection context:
+
+**Costs**:
+- **False Positive**: Manual review cost, potential customer friction
+- **False Negative**: Financial loss from undetected fraud
+
+**With current model**:
+- **11 false positives**: 11 legitimate transactions require manual review
+- **17 false negatives**: 17 fraud cases slip through (potential losses)
+
+**Threshold tuning**:
+- **Lower threshold (e.g., 0.3)**: Catch more fraud (↑ recall) but more false alarms (↓ precision)
+- **Higher threshold (e.g., 0.7)**: Fewer false alarms (↑ precision) but miss more fraud (↓ recall)
+
+The optimal threshold depends on the relative costs of false positives vs. false negatives.
+
+## Validation Set Composition
+
+- **Total samples**: 593
+- **Legitimate transactions**: 447 (75.4%)
+- **Fraudulent transactions**: 146 (24.6%)
+- **Class imbalance ratio**: ~3:1 (legitimate:fraud)
+
+The stratified split maintained the original class distribution, ensuring reliable evaluation.
+
+## Conclusion
+
+The fraud detection model demonstrates **excellent performance** with:
+- 95% accuracy
+- 98.8% AUC-ROC score
+- Strong performance on both classes
+
+The model is **production-ready** and can effectively identify fraudulent transactions with minimal false alarms. The high AUC-ROC score indicates robust probability calibration, making it suitable for risk-based decision making.
+
+## Next Steps
+
+For implementation details:
+- [Model Overview](/ml/model-overview) - Architecture and configuration
+- [Data Preprocessing](/ml/data-preprocessing) - Data preparation steps
+- [Model Training](/ml/model-training) - Training process and strategy

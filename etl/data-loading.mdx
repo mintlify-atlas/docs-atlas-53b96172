@@ -1,0 +1,113 @@
+---
+title: "Data Loading"
+description: "Parse and load OFEI power plant data files into structured format"
+---
+
+## Overview
+
+This module handles the extraction of power plant generation data from OFEI text files. The data contains information about agents (power companies), plant names, types, and 24-hour time series generation data.
+
+## Data Source Format
+
+The OFEI files follow a specific text format:
+- Agent information marked with `AGENTE:` prefix
+- Plant records containing type `D` with comma-separated values
+- 24 hourly generation values per plant
+
+## Parsing Implementation
+
+```python
+import pandas as pd
+
+# Ruta del archivo
+ruta = "/content/drive/MyDrive/Prueba_tecnica/Datos3/OFEI1204.txt"
+
+# Lista donde guardaremos los registros finales
+data = []
+
+# Variable para almacenar el agente actual
+agente_actual = None
+
+with open(ruta, "r", encoding="latin-1") as file:
+    for line in file:
+        line = line.strip()
+
+        # Detectar líneas de agente
+        if line.startswith("AGENTE:"):
+            agente_actual = line.replace("AGENTE:", "").strip()
+
+        # Procesar solo líneas que contienen ", D,"
+        elif ", D," in line:
+            partes = line.split(",")
+            planta = partes[0].strip()
+            tipo = partes[1].strip()
+
+            # Extraer las 24 horas
+            horas = [float(h.strip()) for h in partes[2:26]]
+
+            # Construir registro
+            registro = [agente_actual, tipo, planta] + horas
+
+            data.append(registro)
+
+# Crear nombres de columnas
+columnas = ["Agente", "Tipo", "Planta"] + [f"Hora_{i}" for i in range(1, 25)]
+
+# Crear DataFrame final
+df_final = pd.DataFrame(data, columns=columnas)
+```
+
+## Parsing Logic
+
+### Agent Detection
+The parser maintains state by tracking the current agent:
+```python
+if line.startswith("AGENTE:"):
+    agente_actual = line.replace("AGENTE:", "").strip()
+```
+
+### Plant Record Extraction
+Records with type `D` are parsed:
+```python
+elif ", D," in line:
+    partes = line.split(",")
+    planta = partes[0].strip()
+    tipo = partes[1].strip()
+    
+    # Extraer las 24 horas
+    horas = [float(h.strip()) for h in partes[2:26]]
+```
+
+### Record Structure
+Each record combines:
+- **Agent name** (from previous `AGENTE:` line)
+- **Type** (D = generation type)
+- **Plant name**
+- **24 hourly values** (Hora_1 through Hora_24)
+
+## Output DataFrame Structure
+
+| Column | Description | Type |
+|--------|-------------|------|
+| Agente | Power company name | string |
+| Tipo | Plant type (D) | string |
+| Planta | Plant identifier | string |
+| Hora_1 to Hora_24 | Hourly generation values (MW) | float |
+
+## Sample Output
+
+```
+         Agente Tipo      Planta  Hora_1  Hora_2  ...  Hora_24
+0    AES CHIVOR    D     CHIVOR1  125.00  125.00  ...   125.00
+1    AES CHIVOR    D     CHIVOR2  125.00  125.00  ...   125.00
+2       EMGESA    D     BETANIA   364.00  364.00  ...   364.00
+```
+
+The resulting dataset contains **305 rows** representing all active power plants with their 24-hour generation profiles.
+
+## File Encoding
+
+Note the use of `latin-1` encoding to handle special characters in Colombian power plant names:
+```python
+with open(ruta, "r", encoding="latin-1") as file:
+```

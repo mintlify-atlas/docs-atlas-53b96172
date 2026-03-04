@@ -1,0 +1,148 @@
+---
+title: "Data Manipulation"
+description: "Filter, merge, and transform power plant data with master data"
+---
+
+## Overview
+
+This module performs data manipulation operations to filter and merge power generation data with master data, focusing on EMGESA plants and calculating aggregated metrics.
+
+## Data Sources
+
+### Master Data (Excel)
+- Contains plant metadata and agent information
+- Includes plant types (Hydro, Thermal, etc.)
+- Links OFEI identifiers to plant names
+
+### Generation Data (TXT)
+- dDEC file format with hourly generation
+- 24 columns representing hours (H1-H24)
+- Plant-level generation data
+
+## Loading Master Data
+
+```python
+import pandas as pd
+
+# 1. Cargar Master Data con las columnas solicitadas
+cols_master = [
+    'Nombre visible Agente',
+    'AGENTE (OFEI)',
+    'CENTRAL (dDEC, dSEGDES, dPRU…)',
+    'Tipo de central (Hidro, Termo, Filo, Menor)'
+]
+
+df_master = pd.read_excel(
+    '/content/drive/MyDrive/Prueba_tecnica/Datos3/Datos Maestros VF.xlsx',
+    usecols=cols_master
+)
+```
+
+## Filtering by Agent and Type
+
+```python
+# 2. Filtrar por Agente (EMGESA) y Tipo (H o T)
+agentes = ['EMGESA', 'EMGESA S.A.']
+tipos = ['H', 'T']
+
+df_m_filt = df_master[
+    (df_master['AGENTE (OFEI)'].isin(agentes)) &
+    (df_master['Tipo de central (Hidro, Termo, Filo, Menor)'].isin(tipos))
+].copy()
+```
+
+### Filter Criteria
+- **Agents**: EMGESA or EMGESA S.A.
+- **Plant Types**: 
+  - H = Hydro (Hidroeléctrica)
+  - T = Thermal (Termoeléctrica)
+
+## Loading Generation Data
+
+```python
+# 3. Cargar el TXT
+nombres_columnas = ['CENTRAL'] + [f'H{i}' for i in range(1, 25)]
+
+df_ddec = pd.read_csv(
+    '/content/drive/MyDrive/Prueba_tecnica/Datos3/dDEC1204.TXT',
+    header=None,           # Le decimos que la primera fila NO son títulos
+    names=nombres_columnas, # Asignamos nuestros propios títulos
+    quotechar='"',         # Maneja los nombres que vienen entre comillas como "ALBAN"
+    skipinitialspace=True, # Elimina espacios después de comas
+    encoding='latin-1'     # Evita errores por caracteres especiales
+)
+```
+
+## Data Cleaning for Merge
+
+```python
+# 4. Limpieza de texto para asegurar el cruce
+df_m_filt['CENTRAL (dDEC, dSEGDES, dPRU…)'] = \
+    df_m_filt['CENTRAL (dDEC, dSEGDES, dPRU…)'].str.strip().str.upper()
+
+df_ddec['CENTRAL'] = df_ddec['CENTRAL'].str.strip().str.upper()
+```
+
+Text normalization ensures successful joins by:
+- Removing leading/trailing whitespace
+- Converting to uppercase
+- Standardizing plant names
+
+## Merging Datasets
+
+```python
+# 5. Realizar el Merge
+df_merged = pd.merge(
+    df_m_filt,
+    df_ddec,
+    left_on='CENTRAL (dDEC, dSEGDES, dPRU…)',
+    right_on='CENTRAL'
+)
+```
+
+### Join Operation
+- **Type**: Inner join
+- **Key**: Plant name (CENTRAL)
+- **Result**: Combined dataset with master data + generation data
+
+## Calculating Aggregates
+
+```python
+# 6. Calcular Suma Horizontal (H1 a H24)
+columnas_horas = [f'H{i}' for i in range(1, 25)]
+df_merged['Suma_Total'] = df_merged[columnas_horas].sum(axis=1)
+```
+
+The `Suma_Total` column represents the total daily generation across all 24 hours.
+
+## Filtering Active Plants
+
+```python
+# 7. Seleccionar solo plantas con suma mayor a cero
+df_resultado = df_merged[df_merged['Suma_Total'] > 0].copy()
+```
+
+This filters out plants with no generation activity during the day.
+
+## Final Dataset Structure
+
+| Column | Source | Description |
+|--------|--------|-------------|
+| Nombre visible Agente | Master | Display name |
+| AGENTE (OFEI) | Master | Official agent name |
+| CENTRAL | Master/dDEC | Plant identifier |
+| Tipo de central | Master | Plant type (H/T) |
+| H1-H24 | dDEC | Hourly generation (MW) |
+| Suma_Total | Calculated | Daily total generation |
+
+## Sample Output
+
+```
+   Nombre visible Agente  AGENTE (OFEI)  CENTRAL  Tipo  H1   H2  ... Suma_Total
+0                EMGESA  EMGESA S.A.   BETANIA     H  364  364  ...      8736
+1                EMGESA  EMGESA S.A.  ELQUIMBO     H   85   85  ...      2040
+2                EMGESA  EMGESA S.A.    GUAVIO     H    0    0  ...      4325
+3                EMGESA  EMGESA S.A.     PAGUA     H  600  600  ...     14400
+```
+
+The resulting dataset contains **16 rows** of EMGESA plants (H or T type) with active generation.

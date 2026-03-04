@@ -1,80 +1,279 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get started with the data engineering technical test project in minutes'
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This quickstart guide will help you explore and understand the data engineering technical test project. The project demonstrates proficiency in ETL pipelines, database design, and machine learning.
 
-### Step 1: Set up your local environment
+## Exploring the Project
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Review the Project Structure">
+    Start by understanding the organization of the project files:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    - **Prueba_tecnica_Dataknow.ipynb** - Main Jupyter notebook with all implementations
+    - **prueba_SQL_Dataknow.sql** - SQL schema and optimization strategies
+    - **test_evaluado.csv** - Fraud detection model predictions
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Learn more in the [Project Structure](/project-structure) guide.
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Understand the Data Sources">
+    The project works with three types of data:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    **Power Plant Data (OFEI)**
+    - Text file with generation data for 305 power plants
+    - 24 hourly generation values per plant
+    - Agent-based organization
+    
+    **Weather Data**
+    - Colombian cities meteorological observations
+    - Temperature, cloud coverage, UV index, wind speed
+    - Time-series data requiring aggregation
+    
+    **Fraud Detection Dataset**
+    - Training and test CSV files
+    - Multiple numeric and categorical features
+    - Binary classification target
+    
+    See [Data Schemas](/reference/power-plant-schema) for detailed structure.
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Run the ETL Pipeline">
+    The ETL pipeline demonstrates data loading and transformation:
+    
+    ```python
+    import pandas as pd
+    
+    # Parse OFEI text file
+    data = []
+    agente_actual = None
+    
+    with open("OFEI1204.txt", "r", encoding="latin-1") as file:
+        for line in file:
+            if line.startswith("AGENTE:"):
+                agente_actual = line.replace("AGENTE:", "").strip()
+            elif ", D," in line:
+                partes = line.split(",")
+                planta = partes[0].strip()
+                tipo = partes[1].strip()
+                horas = [float(h.strip()) for h in partes[2:26]]
+                registro = [agente_actual, tipo, planta] + horas
+                data.append(registro)
+    
+    # Create DataFrame
+    columnas = ["Agente", "Tipo", "Planta"] + [f"Hora_{i}" for i in range(1, 25)]
+    df_final = pd.DataFrame(data, columns=columnas)
+    ```
+    
+    Explore the full implementation in [Data Loading](/etl/data-loading).
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Review Database Design">
+    The SQL component showcases production-ready database design:
+    
+    ```sql
+    CREATE TABLE clima (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        localidad VARCHAR(100) NOT NULL,
+        pais VARCHAR(50) NOT NULL DEFAULT 'Colombia',
+        tempCelsius DECIMAL(5,2) NOT NULL,
+        fechaHora DATETIME NOT NULL,
+        coberturaNubes VARCHAR(20) CHECK (coberturaNubes IN ('Minima','Parcial','Total')) NOT NULL,
+        CONSTRAINT uk_localidad_fecha UNIQUE (localidad, fechaHora)
+    );
+    ```
+    
+    Learn about [Optimization Strategies](/database/optimization-strategies) including indexing, partitioning, and dimensional modeling.
+  </Step>
 
-### Step 3: Go live
+  <Step title="Examine the ML Model">
+    The fraud detection model achieves exceptional performance:
+    
+    ```python
+    from sklearn.ensemble import RandomForestClassifier
+    
+    # Initialize model
+    model = RandomForestClassifier(
+        n_estimators=200,
+        random_state=42,
+        class_weight='balanced'
+    )
+    
+    # Train model
+    model.fit(X_train, y_train)
+    
+    # Results:
+    # - Accuracy: 95%
+    # - AUC-ROC: 98.8%
+    # - Precision (fraud): 92%
+    # - Recall (fraud): 88%
+    ```
+    
+    Dive deeper into the [Model Overview](/ml/model-overview) and [Evaluation](/ml/evaluation).
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+## Key Components
 
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+<CardGroup cols={3}>
+  <Card title="ETL Pipelines" icon="database" href="/etl/data-loading">
+    Custom parsers for Colombian energy sector data with multi-source integration
+  </Card>
+  
+  <Card title="Database Design" icon="table" href="/database/schema-design">
+    MySQL implementation with advanced optimization and window functions
+  </Card>
+  
+  <Card title="ML Model" icon="brain" href="/ml/model-overview">
+    Random Forest classifier with 98.8% AUC-ROC for fraud detection
+  </Card>
 </CardGroup>
 
+## Running the Project
+
+### Google Colab (Recommended)
+
+The project is designed for Google Colab:
+
+<Steps>
+  <Step title="Open in Colab">
+    Click the "Open in Colab" badge in the notebook or navigate to:
+    ```
+    https://colab.research.google.com/github/Jocesitho/Prueba_tecnica_dataknow_Jose_Arteaga/blob/master/Prueba_tecnica_Dataknow.ipynb
+    ```
+  </Step>
+  
+  <Step title="Mount Google Drive">
+    ```python
+    from google.colab import drive
+    drive.mount('/content/drive')
+    ```
+    Ensure data files are in the correct Drive path.
+  </Step>
+  
+  <Step title="Run All Cells">
+    Execute cells sequentially to see:
+    - Data loading and parsing
+    - DataFrame transformations
+    - ML model training
+    - Evaluation results
+  </Step>
+</Steps>
+
+### Local Environment
+
+To run locally:
+
+<CodeGroup>
+```bash Installation
+pip install pandas scikit-learn jupyter openpyxl
+```
+
+```bash Launch
+jupyter notebook Prueba_tecnica_Dataknow.ipynb
+```
+</CodeGroup>
+
+<Warning>
+Update file paths to reference your local data directory instead of Google Drive paths.
+</Warning>
+
+## SQL Database Setup
+
+### Create the Database
+
+```sql
+CREATE DATABASE meteorologia;
+USE meteorologia;
+```
+
+### Run the Schema
+
+Execute the SQL file:
+
+```bash
+mysql -u your_user -p meteorologia < prueba_SQL_Dataknow.sql
+```
+
+Or run sections individually in your MySQL client.
+
+## Project Results
+
+### ETL Pipeline Output
+
+- **305 power plants** parsed from OFEI file
+- **16 active plants** after filtering (EMGESA, Hydro/Thermal)
+- **24 hourly columns** aggregated for analysis
+
+### Database Features
+
+- **Strategic indexing** on (localidad, fechaHora)
+- **RANGE partitioning** by year
+- **Dimensional modeling** for location data
+- **Window functions** for temperature delta calculations
+
+### ML Model Performance
+
+| Metric | Value |
+|--------|-------|
+| Accuracy | 95% |
+| AUC-ROC | 98.8% |
+| Precision (Non-fraud) | 96% |
+| Recall (Non-fraud) | 98% |
+| Precision (Fraud) | 92% |
+| Recall (Fraud) | 88% |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="/project-structure">
+    Understand the complete file organization and implementation structure
+  </Card>
+  
+  <Card title="Requirements" icon="list-check" href="/requirements">
+    Review technical requirements and dependencies
+  </Card>
+  
+  <Card title="Python Examples" icon="code" href="/reference/python-examples">
+    Explore code examples and implementation patterns
+  </Card>
+  
+  <Card title="SQL Queries" icon="database" href="/reference/sql-queries">
+    See SQL query examples and optimization techniques
+  </Card>
+</CardGroup>
+
+## Technical Highlights
+
+<AccordionGroup>
+  <Accordion title="Data Engineering Skills" icon="gears">
+    - Custom text file parsing with encoding handling
+    - Multi-source data integration (Excel, TXT, CSV)
+    - Pandas merge operations with data quality checks
+    - Horizontal aggregation across multiple columns
+    - Feature engineering and preprocessing pipelines
+  </Accordion>
+  
+  <Accordion title="Database Expertise" icon="database">
+    - Comprehensive schema design with constraints
+    - Three optimization strategies implementation
+    - Window functions for analytical queries
+    - Data type selection and normalization
+    - Foreign key relationships and referential integrity
+  </Accordion>
+  
+  <Accordion title="Machine Learning Proficiency" icon="chart-line">
+    - Imbalanced classification problem solving
+    - Missing value imputation strategies
+    - Categorical encoding techniques
+    - Model evaluation with multiple metrics
+    - Threshold optimization for business requirements
+  </Accordion>
+</AccordionGroup>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+This project was completed as part of a technical assessment for the Data Engineer position at Dataknow. All implementations are production-ready and follow industry best practices.
 </Note>

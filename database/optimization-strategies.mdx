@@ -1,0 +1,346 @@
+---
+title: 'Optimization Strategies'
+description: 'Database optimization techniques for weather data queries and storage'
+---
+
+## Overview
+
+As the meteorological database grows with continuous weather observations, query performance and storage efficiency become critical. This document presents three complementary optimization strategies implemented in the system.
+
+## Strategy 1: Strategic Indexing
+
+### Purpose
+
+Improve query performance for time-range and location-based searches, which are the most common access patterns in meteorological data analysis.
+
+### Implementation
+
+```sql
+CREATE INDEX idx_localidad_fecha
+ON clima(localidad, fechaHora);
+```
+
+### Index Design
+
+**Composite Index**: `(localidad, fechaHora)`
+
+This index is ordered by locality first, then by timestamp, enabling efficient queries that:
+- Filter by location
+- Filter by time range
+- Filter by both location and time range
+
+### Use Cases
+
+#### Time Range Queries
+
+```sql
+SELECT *
+FROM clima
+WHERE fechaHora BETWEEN '2025-01-01' AND '2025-02-21';
+```
+
+**Performance Impact**: The index allows the database to quickly locate all records within the date range without scanning the entire table.
+
+#### Location-Specific Queries
+
+```sql
+SELECT *
+FROM clima
+WHERE localidad = 'Bogota'
+ORDER BY fechaHora DESC;
+```
+
+**Performance Impact**: The index enables direct access to a specific location's data and maintains chronological ordering.
+
+#### Combined Location and Time Queries
+
+```sql
+SELECT *
+FROM clima
+WHERE localidad = 'Medellin'
+AND fechaHora BETWEEN '2025-01-01' AND '2025-12-31';
+```
+
+**Performance Impact**: Optimal use case - both index columns are utilized for maximum efficiency.
+
+### When to Use
+
+✅ **Use this strategy when:**
+- Queries frequently filter by location and/or time
+- Real-time data access is required
+- Storage space is not a primary concern
+- Write performance is acceptable (indexes add overhead to INSERT operations)
+
+❌ **Avoid when:**
+- The table is write-heavy with minimal reads
+- Queries rarely filter on these columns
+- Storage space is severely constrained
+
+---
+
+## Strategy 2: Partitioning by Date
+
+### Purpose
+
+Improve query performance and enable efficient data lifecycle management by physically separating data by year.
+
+### Implementation
+
+```sql
+ALTER TABLE clima
+PARTITION BY RANGE (YEAR(fechaHora)) (
+    PARTITION p2024 VALUES LESS THAN (2025),
+    PARTITION p2025 VALUES LESS THAN (2026),
+    PARTITION pMax VALUES LESS THAN MAXVALUE
+);
+```
+
+### Partitioning Scheme
+
+**Type**: RANGE partitioning
+
+**Partitioning Key**: `YEAR(fechaHora)`
+
+**Partitions**:
+- `p2024` - All records from year 2024
+- `p2025` - All records from year 2025
+- `pMax` - All records from 2026 onwards
+
+### How It Works
+
+1. **Partition Pruning**: When querying data for a specific year, MySQL only scans the relevant partition(s), ignoring others entirely.
+
+2. **Physical Separation**: Each partition is stored separately, reducing I/O operations.
+
+3. **Maintenance**: Old partitions can be archived, backed up, or dropped independently.
+
+### Performance Benefits
+
+#### Year-Specific Queries
+
+```sql
+SELECT AVG(tempCelsius)
+FROM clima
+WHERE fechaHora BETWEEN '2025-01-01' AND '2025-12-31';
+```
+
+**Optimization**: Only partition `p2025` is scanned, potentially reducing data scanned by 66% or more.
+
+#### Multi-Year Queries
+
+```sql
+SELECT localidad, YEAR(fechaHora), AVG(tempCelsius)
+FROM clima
+WHERE YEAR(fechaHora) IN (2024, 2025)
+GROUP BY localidad, YEAR(fechaHora);
+```
+
+**Optimization**: Partitions `p2024` and `p2025` are scanned in parallel, while `pMax` is pruned.
+
+### Data Lifecycle Management
+
+```sql
+-- Example: Archive 2024 data
+ALTER TABLE clima EXCHANGE PARTITION p2024 WITH TABLE clima_archive_2024;
+
+-- Example: Drop old data
+ALTER TABLE clima DROP PARTITION p2024;
+```
+
+### When to Use
+
+✅ **Use this strategy when:**
+- Data has a strong temporal component
+- Queries typically filter by year, month, or date ranges
+- Historical data needs to be archived or purged periodically
+- Table size exceeds several million rows
+- Different time periods have different access patterns (recent data = hot, old data = cold)
+
+❌ **Avoid when:**
+- Queries frequently span multiple years without date filters
+- Table size is small (less than 100K rows)
+- Partitioning key (year) has low cardinality for your use case
+- You need to frequently reorganize partition boundaries
+
+### Best Practices
+
+1. **Future-Proof**: Always include a `MAXVALUE` partition to handle future dates
+2. **Combine with Indexing**: Partitioning and indexing work together - partition first, then index within partitions
+3. **Monitor Growth**: Plan to add new partitions as new years begin
+4. **Align with Business Logic**: Partition boundaries should match reporting periods
+
+---
+
+## Strategy 3: Dimensional Modeling
+
+### Purpose
+
+Normalize location data to reduce redundancy and improve referential integrity. This follows a star/snowflake schema design pattern common in data warehousing.
+
+### Implementation
+
+```sql
+CREATE TABLE dim_localidad (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    localidad VARCHAR(100),
+    pais VARCHAR(100)
+);
+```
+
+### Schema Transformation
+
+**Before (Denormalized)**:
+```
+clima: id, localidad, pais, tempCelsius, fechaHora, ...
+```
+
+**After (Normalized)**:
+```
+dim_localidad: id, localidad, pais
+clima: id, localidad_id (FK), tempCelsius, fechaHora, ...
+```
+
+### Adding Foreign Key Relationship
+
+```sql
+-- Modify the main tabla to reference the dimension
+ALTER TABLE clima
+ADD COLUMN localidad_id INT,
+ADD FOREIGN KEY (localidad_id) REFERENCES dim_localidad(id);
+```
+
+### Benefits
+
+#### 1. Storage Efficiency
+
+**Denormalized**:
+- 'Bogota' + 'Colombia' stored in every row
+- 1000 Bogota observations = 1000 × ~20 bytes = ~20KB redundant data
+
+**Normalized**:
+- 'Bogota' + 'Colombia' stored once in `dim_localidad`
+- 1000 Bogota observations = 1000 × 4 bytes (INT) = 4KB
+- **Savings**: ~80% reduction in location data storage
+
+#### 2. Data Integrity
+
+- **Consistency**: Location names cannot have spelling variations ('Bogota' vs 'Bogotá')
+- **Referential Integrity**: Cannot insert weather data for non-existent locations
+- **Centralized Updates**: Changing 'Colombia' to 'República de Colombia' requires one update
+
+#### 3. Query Flexibility
+
+```sql
+-- Enriched location queries
+SELECT 
+    l.localidad,
+    l.pais,
+    AVG(c.tempCelsius) as avg_temp
+FROM clima c
+JOIN dim_localidad l ON c.localidad_id = l.id
+GROUP BY l.localidad, l.pais;
+```
+
+#### 4. Extended Dimensions
+
+```sql
+-- Easy to add location metadata
+ALTER TABLE dim_localidad
+ADD COLUMN region VARCHAR(50),
+ADD COLUMN latitud DECIMAL(10,8),
+ADD COLUMN longitud DECIMAL(11,8),
+ADD COLUMN altitud INT;
+```
+
+### When to Use
+
+✅ **Use this strategy when:**
+- Location data is highly repetitive (same cities measured frequently)
+- You need to maintain location metadata (coordinates, region, timezone)
+- Data quality and consistency are critical
+- Building a data warehouse or analytics platform
+- Multiple fact tables reference the same locations
+
+❌ **Avoid when:**
+- Dataset is small with few repeated locations
+- Simplicity is prioritized over normalization
+- JOIN overhead would impact real-time query performance
+- Location information rarely changes and has no additional attributes
+
+### Extended Dimensional Model
+
+For a full data warehouse implementation:
+
+```sql
+-- Time dimension
+CREATE TABLE dim_tiempo (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    fecha DATE,
+    anio INT,
+    mes INT,
+    dia INT,
+    trimestre INT,
+    nombre_mes VARCHAR(20),
+    dia_semana VARCHAR(20)
+);
+
+-- Fact table (clima as fact)
+ALTER TABLE clima
+ADD COLUMN localidad_id INT,
+ADD COLUMN tiempo_id INT,
+ADD FOREIGN KEY (localidad_id) REFERENCES dim_localidad(id),
+ADD FOREIGN KEY (tiempo_id) REFERENCES dim_tiempo(id);
+```
+
+---
+
+## Combining Strategies
+
+These three optimization strategies are **not mutually exclusive**. For optimal performance:
+
+### Recommended Combination
+
+1. **Dimensional Modeling** - Normalize location data first
+2. **Partitioning** - Partition the fact table by year
+3. **Indexing** - Create indexes on partition pruning keys and foreign keys
+
+```sql
+-- Step 1: Create dimension
+CREATE TABLE dim_localidad (...);
+
+-- Step 2: Modify fact table
+ALTER TABLE clima ADD COLUMN localidad_id INT;
+
+-- Step 3: Partition
+ALTER TABLE clima PARTITION BY RANGE (YEAR(fechaHora)) (...);
+
+-- Step 4: Index
+CREATE INDEX idx_localidad_fecha ON clima(localidad_id, fechaHora);
+```
+
+### Performance Impact Matrix
+
+| Query Type | Indexing | Partitioning | Dimensional |
+|------------|----------|--------------|-------------|
+| Single location, date range | ⭐⭐⭐ | ⭐⭐ | ⭐ |
+| All locations, single year | ⭐⭐ | ⭐⭐⭐ | ⭐ |
+| Aggregations by region | ⭐ | ⭐ | ⭐⭐⭐ |
+| Recent data (hot queries) | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
+| Historical analysis | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+
+## Monitoring and Validation
+
+```sql
+-- Check index usage
+SHOW INDEX FROM clima;
+
+-- Verify partitioning
+SELECT PARTITION_NAME, TABLE_ROWS
+FROM INFORMATION_SCHEMA.PARTITIONS
+WHERE TABLE_NAME = 'clima';
+
+-- Analyze query plans
+EXPLAIN SELECT * FROM clima
+WHERE localidad = 'Bogota'
+AND fechaHora BETWEEN '2025-01-01' AND '2025-12-31';
+```

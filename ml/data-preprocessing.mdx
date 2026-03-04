@@ -1,0 +1,171 @@
+---
+title: 'Data Preprocessing'
+description: 'Data preparation and feature engineering for fraud detection'
+---
+
+## Overview
+
+Data preprocessing is a critical step to ensure the model receives clean, consistent, and properly formatted data. This page documents all preprocessing steps applied to the fraud detection dataset.
+
+## Feature Selection
+
+The first step is to identify which features to use for modeling:
+
+```python
+# Get columns that exist in both train and test datasets
+cols_comunes = train.columns.intersection(test.columns).tolist()
+
+# Exclude 'id' (identifier) and 'FRAUDE' (target variable)
+features = [c for c in cols_comunes if c not in ['id', 'FRAUDE']]
+
+# Extract features and target
+X = train[features].copy()     # Predictor variables from training set
+y = train['FRAUDE']            # Target variable (what we want to predict)
+
+X_test = test[features].copy() # Predictor variables from test set
+ids_test = test['id']          # Save IDs for final submission file
+```
+
+**Key decisions**:
+- Only use features present in both train and test sets
+- Exclude `id` as it's just an identifier with no predictive value
+- Exclude `FRAUDE` as it's the target variable
+
+## Handling Missing Values
+
+Missing data can negatively impact model performance. Different strategies are applied based on data type:
+
+### Numeric Features
+
+For numeric columns, missing values are replaced with the **mean** of that column:
+
+```python
+# Identify numeric columns
+numericas = X.select_dtypes(include=['int64','float64']).columns
+
+# Fill missing values with mean
+for col in numericas:
+    X.loc[:, col] = X[col].fillna(X[col].mean())  # Replace nulls with mean
+    if col in X_test.columns:  # Verify column exists in test
+        X_test.loc[:, col] = X_test[col].fillna(X[col].mean())  # Use train mean
+```
+
+**Why mean imputation?**
+- Simple and effective for numeric data
+- Preserves the distribution's central tendency
+- Uses train mean for test data to prevent data leakage
+
+### Categorical Features
+
+For categorical columns, missing values are replaced with the label **"Desconocido"** (Unknown):
+
+```python
+# Identify categorical columns
+categoricas = X.select_dtypes(include=['object']).columns
+
+# Fill missing values with "Desconocido"
+for col in categoricas:
+    X.loc[:, col] = X[col].fillna("Desconocido")  # Replace nulls with "Unknown"
+    if col in X_test.columns:  # Verify column exists in test
+        X_test.loc[:, col] = X_test[col].fillna("Desconocido")  # Apply same treatment
+```
+
+**Why "Desconocido"?**
+- Creates an explicit category for missing values
+- Allows the model to learn patterns associated with missing data
+- More informative than dropping rows with missing values
+
+## One-Hot Encoding
+
+Machine learning models require numeric inputs. Categorical variables are converted to binary columns:
+
+```python
+# Convert categorical variables to binary columns (one-hot encoding)
+X = pd.get_dummies(X, drop_first=True)
+X_test = pd.get_dummies(X_test, drop_first=True)
+```
+
+**One-hot encoding example**:
+
+| Original | Category_A | Category_B | Category_C |
+|----------|------------|------------|------------|
+| A        | 1          | 0          | 0          |
+| B        | 0          | 1          | 0          |
+| C        | 0          | 0          | 1          |
+
+With `drop_first=True`, we drop the first category to avoid multicollinearity:
+
+| Original | Category_B | Category_C |
+|----------|------------|------------|
+| A        | 0          | 0          |
+| B        | 1          | 0          |
+| C        | 0          | 1          |
+
+## Train-Test Alignment
+
+A critical step to ensure the test set has the same columns as training:
+
+```python
+# Align test columns with train (add missing columns with 0, remove extra columns)
+X_test = X_test.reindex(columns=X.columns, fill_value=0)
+```
+
+**Why is this necessary?**
+- One-hot encoding may create different columns if categories differ between train/test
+- Missing columns in test are filled with 0 (indicating absence of that category)
+- Extra columns in test are removed
+- Ensures model receives expected input shape
+
+## Complete Preprocessing Pipeline
+
+Here's the full preprocessing code with comments:
+
+```python
+import pandas as pd
+
+# Load data
+train = pd.read_csv("/content/drive/MyDrive/Prueba_tecnica/Datos3/train.csv")
+test = pd.read_csv("/content/drive/MyDrive/Prueba_tecnica/Datos3/test.csv")
+
+# Feature selection
+cols_comunes = train.columns.intersection(test.columns).tolist()
+features = [c for c in cols_comunes if c not in ['id', 'FRAUDE']]
+
+X = train[features].copy()
+y = train['FRAUDE']
+X_test = test[features].copy()
+ids_test = test['id']
+
+# Handle numeric missing values
+numericas = X.select_dtypes(include=['int64','float64']).columns
+for col in numericas:
+    X.loc[:, col] = X[col].fillna(X[col].mean())
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna(X[col].mean())
+
+# Handle categorical missing values
+categoricas = X.select_dtypes(include=['object']).columns
+for col in categoricas:
+    X.loc[:, col] = X[col].fillna("Desconocido")
+    if col in X_test.columns:
+        X_test.loc[:, col] = X_test[col].fillna("Desconocido")
+
+# One-hot encoding
+X = pd.get_dummies(X, drop_first=True)
+X_test = pd.get_dummies(X_test, drop_first=True)
+
+# Align test with train
+X_test = X_test.reindex(columns=X.columns, fill_value=0)
+```
+
+## Data Quality Checks
+
+After preprocessing:
+- No missing values remain in the dataset
+- All features are numeric
+- Train and test have identical column structures
+- Data is ready for model training
+
+## Next Steps
+
+With preprocessed data ready, proceed to [Model Training](/ml/model-training) to see how the model is trained and validated.
